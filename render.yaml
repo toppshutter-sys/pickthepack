@@ -1,0 +1,18 @@
+# Optional "Blueprint" for one-click deploy on Render (render.com). Not
+# required — the manual dashboard flow in DEPLOYMENT.md works just as well
+# and is arguably simpler for a first deploy. This file just lets Render
+# auto-configure the service if you connect this repo and it detects a
+# render.yaml at the root.
+services:
+  - type: web
+    name: pick-the-pack-server
+    runtime: node
+    rootDir: server
+    plan: free
+    region: virginia # closest of Render's regions to the Caribbean — lowest latency for players there
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "20"

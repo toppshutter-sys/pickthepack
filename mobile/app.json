@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "Pick the Pack",
+    "slug": "pick-the-pack",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "backgroundColor": "#0b3d2e"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0b3d2e"
+      }
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}
