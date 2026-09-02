@@ -17,7 +17,7 @@ import GradientButton from "../components/GradientButton";
 const STORAGE_KEY = "pick-the-pack:home-form";
 
 export default function HomeScreen({ onEnterRoom }) {
-  const [serverUrl, setServerUrl] = useState("http://192.168.1.10:4000");
+  const [serverUrl, setServerUrl] = useState("https://pickthepack.onrender.com");
   const [playerName, setPlayerName] = useState("");
   const [packAmount, setPackAmount] = useState(5);
   const [joinCode, setJoinCode] = useState("");
@@ -99,7 +99,7 @@ export default function HomeScreen({ onEnterRoom }) {
           onChangeText={setServerUrl}
           autoCapitalize="none"
           autoCorrect={false}
-          placeholder="http://192.168.1.10:4000"
+          placeholder="https://pickthepack.onrender.com"
           placeholderTextColor="#8b8b8b"
         />
         <Text style={styles.hint}>
