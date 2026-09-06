@@ -76,16 +76,24 @@ anyone to play without installing anything, especially on iPhone where a real st
 requires a paid Apple Developer account.
 
 Render builds and serves it automatically: `render.yaml`'s build command runs
-`npx expo export -p web --output-dir ../server/public` after installing the server's own
-dependencies, and `server/src/index.js` serves that folder as static files (falling back to
-`index.html` for any route that isn't `/health` or `/socket.io`) — so the web app and the game
-server are the same Render service, same URL, no CORS to configure between them.
+`npx expo export -p web --clear --output-dir ../server/public` (after installing the server's own
+dependencies and clearing the bundler cache first — Render caches `node_modules` between builds for
+speed, which can otherwise leave Metro serving a stale bundle from a previous deploy) and
+`server/src/index.js` serves that folder as static files — so the web app and the game server are
+the same Render service, same URL, no CORS to configure between them.
+
+**If you change the Build Command in `render.yaml`,** it won't automatically apply to an
+already-existing Render service created via the manual dashboard flow above — you have to also
+update it by hand in the dashboard (Settings → Build Command) and trigger a Manual Deploy, or link
+the service to the Blueprint (New → Blueprint, pointing at this repo, and accept adopting the
+existing service if offered) so future `render.yaml` changes sync automatically.
 
 To open it: visit your server's URL directly in a browser (e.g. `https://pickthepack.onrender.com`)
-on any device. The server-address field on the home screen defaults to that same URL, so there's
-nothing to type — just a name and a room code.
+on any device. The server-address field on the home screen is hidden by default (behind an
+"Advanced" link) since it already defaults to that same URL — there's nothing to type, just a name
+and a room code.
 
-Running this locally works the same way: `cd mobile && npx expo export -p web --output-dir
+Running this locally works the same way: `cd mobile && npx expo export -p web --clear --output-dir
 ../server/public`, then `cd server && npm start`, then open `http://localhost:4000`.
 
 ## What this doesn't do yet

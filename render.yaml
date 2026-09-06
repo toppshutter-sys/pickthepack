@@ -10,7 +10,7 @@ services:
     rootDir: server
     plan: free
     region: virginia # closest of Render's regions to the Caribbean — lowest latency for players there
-    buildCommand: npm install && cd ../mobile && npm install && npx expo export -p web --output-dir ../server/public
+    buildCommand: npm install && cd ../mobile && npm install && rm -rf ../server/public && npx expo export -p web --clear --output-dir ../server/public
     startCommand: npm start
     healthCheckPath: /health
     envVars:
