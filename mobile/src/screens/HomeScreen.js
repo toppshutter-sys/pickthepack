@@ -53,9 +53,16 @@ export default function HomeScreen({ onEnterRoom }) {
     try {
       const socket = getSocket(serverUrl.trim());
       await waitForConnect(socket);
+      // Attach this BEFORE emitting create-room: the server sends the
+      // ack and the first room-state back to back, and App.js's listener
+      // only gets subscribed after this promise resolves and triggers a
+      // re-render — on a fast connection that room-state can arrive and
+      // be lost before that subscription exists. Listening first closes
+      // the race entirely.
+      const initialRoomState = new Promise((resolve) => socket.once("room-state", resolve));
       const res = await emitWithAck(socket, "create-room", { playerName, packAmount });
       persist({ serverUrl, playerName });
-      onEnterRoom({ socket, code: res.code, playerName, serverUrl });
+      onEnterRoom({ socket, code: res.code, playerName, serverUrl, initialRoomState: await initialRoomState });
     } catch (e) {
       setError(e.message || "Could not create room. Check the server address.");
     } finally {
@@ -71,9 +78,10 @@ export default function HomeScreen({ onEnterRoom }) {
     try {
       const socket = getSocket(serverUrl.trim());
       await waitForConnect(socket);
+      const initialRoomState = new Promise((resolve) => socket.once("room-state", resolve));
       const res = await emitWithAck(socket, "join-room", { code: joinCode.trim(), playerName });
       persist({ serverUrl, playerName });
-      onEnterRoom({ socket, code: res.code, playerName, serverUrl });
+      onEnterRoom({ socket, code: res.code, playerName, serverUrl, initialRoomState: await initialRoomState });
     } catch (e) {
       setError(e.message || "Could not join room. Check the code and server address.");
     } finally {

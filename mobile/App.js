@@ -37,8 +37,9 @@ export default function App() {
     };
   }, [session]);
 
-  function handleEnterRoom({ socket, code, playerName, serverUrl }) {
+  function handleEnterRoom({ socket, code, playerName, serverUrl, initialRoomState }) {
     setSession({ socket, code, playerName, serverUrl });
+    if (initialRoomState) setRoomState(initialRoomState);
   }
 
   function handleLeaveRoom() {
