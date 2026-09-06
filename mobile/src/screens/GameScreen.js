@@ -5,6 +5,7 @@ import Card from "../components/Card";
 import GradientButton from "../components/GradientButton";
 import GlassPanel from "../components/GlassPanel";
 import { emitWithAck } from "../socket";
+import { centeredContent } from "../responsive";
 
 function isFlipTurn(round, isInstantWin, isRoundOver, playerIndex) {
   const placementPending =
@@ -401,7 +402,7 @@ function WinnerBanner({ isSplit, names, categoryText }) {
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 20, paddingTop: 56, alignItems: "center" },
+  container: { ...centeredContent, padding: 20, paddingTop: 56, alignItems: "center" },
   info: { color: "#fff", fontSize: 16 },
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", width: "100%", marginBottom: 16 },
   potText: { color: "#f0cd7a", fontSize: 20, fontWeight: "800", textShadowColor: "rgba(201,162,75,0.4)", textShadowRadius: 10, textShadowOffset: { width: 0, height: 0 } },

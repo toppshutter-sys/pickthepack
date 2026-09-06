@@ -13,6 +13,7 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getSocket, emitWithAck } from "../socket";
 import GradientButton from "../components/GradientButton";
+import { centeredContent } from "../responsive";
 
 const STORAGE_KEY = "pick-the-pack:home-form";
 
@@ -206,7 +207,7 @@ function waitForConnect(socket) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  container: { padding: 24, paddingTop: 64, paddingBottom: 48 },
+  container: { ...centeredContent, padding: 24, paddingTop: 64, paddingBottom: 48 },
   titleBadge: {
     alignSelf: "center", width: 46, height: 54, borderRadius: 8, backgroundColor: "#f5f7f5",
     alignItems: "center", justifyContent: "center", marginBottom: 10,

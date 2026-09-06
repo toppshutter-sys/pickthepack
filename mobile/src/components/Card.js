@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from "react";
 import { View, Text, StyleSheet, Pressable, Animated, Easing } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
+import { useScale } from "../responsive";
 
 const RED_SUITS = new Set(["hearts", "diamonds"]);
 const SUIT_SYMBOL = { hearts: "♥", diamonds: "♦", spades: "♠", clubs: "♣" };
@@ -26,7 +27,13 @@ const GOLD_BRIGHT = "#f0cd7a";
  * staggers the entrance animation when a whole hand renders at once.
  */
 export default function Card({ card, size = "normal", onPress, disabled, tappable, selected, index = 0 }) {
-  const dims = size === "small" ? styles.small : styles.normal;
+  const scale = useScale();
+  const baseWidth = size === "small" ? 44 : 64;
+  const baseHeight = size === "small" ? 62 : 90;
+  const dims = { width: Math.round(baseWidth * scale), height: Math.round(baseHeight * scale) };
+  const rankFontSize = Math.round((size === "small" ? 14 : 20) * scale);
+  const suitFontSize = Math.round((size === "small" ? 13 : 19) * scale);
+  const emblemFontSize = Math.round(18 * scale);
   const isRed = card && RED_SUITS.has(card.suit);
 
   // Entrance: a quick pop-and-settle, staggered by `index` so a hand deals
@@ -97,13 +104,13 @@ export default function Card({ card, size = "normal", onPress, disabled, tappabl
   const face = !card ? (
     <LinearGradient colors={["#1c5442", "#0a2a20"]} start={{ x: 0.15, y: 0 }} end={{ x: 0.9, y: 1 }} style={[styles.card, dims, styles.back]}>
       <View style={styles.backEmblem}>
-        <Text style={styles.backEmblemText}>♠</Text>
+        <Text style={[styles.backEmblemText, { fontSize: emblemFontSize }]}>♠</Text>
       </View>
     </LinearGradient>
   ) : (
     <LinearGradient colors={["#ffffff", "#edf1ee"]} start={{ x: 0.2, y: 0 }} end={{ x: 0.85, y: 1 }} style={[styles.card, dims, styles.face]}>
-      <Text style={[styles.rank, size === "small" && styles.rankSmall, isRed ? styles.red : styles.black]}>{card.rank}</Text>
-      <Text style={[styles.suit, size === "small" && styles.suitSmall, isRed ? styles.red : styles.black]}>{SUIT_SYMBOL[card.suit]}</Text>
+      <Text style={[styles.rank, { fontSize: rankFontSize }, isRed ? styles.red : styles.black]}>{card.rank}</Text>
+      <Text style={[styles.suit, { fontSize: suitFontSize }, isRed ? styles.red : styles.black]}>{SUIT_SYMBOL[card.suit]}</Text>
     </LinearGradient>
   );
 
@@ -152,8 +159,6 @@ const styles = StyleSheet.create({
     shadowRadius: 9,
     elevation: 3,
   },
-  normal: { width: 64, height: 90 },
-  small: { width: 44, height: 62 },
   face: {},
   back: { borderWidth: 1, borderColor: "rgba(201,162,75,0.35)" },
   backEmblem: {
@@ -165,11 +170,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  backEmblemText: { color: "rgba(240,205,122,0.85)", fontSize: 18, fontWeight: "800" },
-  rank: { fontSize: 20, fontWeight: "800" },
-  rankSmall: { fontSize: 14 },
-  suit: { fontSize: 19 },
-  suitSmall: { fontSize: 13 },
+  backEmblemText: { color: "rgba(240,205,122,0.85)", fontWeight: "800" },
+  rank: { fontWeight: "800" },
+  suit: {},
   red: { color: "#d9463c" },
   black: { color: "#20242a" },
 });

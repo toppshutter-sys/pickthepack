@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Share, Animated, 
 import { emitWithAck } from "../socket";
 import GradientButton from "../components/GradientButton";
 import GlassPanel from "../components/GlassPanel";
+import { centeredContent } from "../responsive";
 
 export default function LobbyScreen({ socket, roomState, code, onLeaveRoom }) {
   const [error, setError] = useState("");
@@ -108,7 +109,7 @@ function PlayerRow({ index, name, isDealer, connected }) {
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 24, paddingTop: 64, alignItems: "center" },
+  container: { ...centeredContent, padding: 24, paddingTop: 64, alignItems: "center" },
   title: { fontSize: 28, fontWeight: "800", color: "#f0cd7a", textShadowColor: "rgba(201,162,75,0.4)", textShadowRadius: 10, textShadowOffset: { width: 0, height: 0 } },
   shareHint: { color: "#f0cd7a", marginTop: 4, marginBottom: 16 },
   packLabel: { color: "#e6efe9", fontSize: 16, marginBottom: 20 },
