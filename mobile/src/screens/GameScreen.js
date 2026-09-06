@@ -17,6 +17,7 @@ const CATEGORY_LABEL = {
   ace23: "Ace-2-3 Sequence",
   sequential: "Sequence",
   flush: "Same-Suit (Flush)",
+  dealerCard: "Dealer's Card (J or 6)",
 };
 
 export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
@@ -214,7 +215,13 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
 
         <View style={styles.pileBlock}>
           <Text style={styles.pileLabel}>
-            {round.faceUpCard ? "Match this card" : placementPending ? "Choosing new target…" : "No flip needed"}
+            {isInstantWin && round.faceUpCard
+              ? "Dealer's card"
+              : round.faceUpCard
+              ? "Match this card"
+              : placementPending
+              ? "Choosing new target…"
+              : "No flip needed"}
           </Text>
           {round.faceUpCard ? (
             <Card

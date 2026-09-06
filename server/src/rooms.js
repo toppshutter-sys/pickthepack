@@ -27,6 +27,7 @@ const CATEGORY_LABEL = {
   ace23: "Ace-2-3 Sequence",
   sequential: "a Sequence",
   flush: "Same-Suit (Flush)",
+  dealerCard: "the Dealer's Card (J or 6)",
 };
 
 class RoomManager {
@@ -157,7 +158,14 @@ class RoomManager {
         this.addLog(room, `Split pot! ${names} tied on the deal with ${categoryLabel} and share $${potAmount} ($${share.toFixed(2)} each).`);
       } else {
         const winnerName = room.players[winners[0]].name;
-        this.addLog(room, `${winnerName} wins the $${potAmount} pot instantly with ${categoryLabel}!`);
+        if (result.category === "dealerCard") {
+          this.addLog(
+            room,
+            `${winnerName} deals a ${result.faceUpCard.rank} of ${result.faceUpCard.suit} — dealer wins the $${potAmount} pot instantly!`
+          );
+        } else {
+          this.addLog(room, `${winnerName} wins the $${potAmount} pot instantly with ${categoryLabel}!`);
+        }
       }
       room.dealerIndex = winners[0]; // winner deals next
       room.potAmount = 0;

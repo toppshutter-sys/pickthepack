@@ -395,7 +395,14 @@ test("dealAndStartRound: an instant-win deal resolves immediately, no matching p
       // The deck must still be present (and correctly sized) so the table UI
       // can keep showing it even though no card gets flipped on an instant win.
       assert.ok(Array.isArray(result.deck));
-      assert.equal(result.deck.length, 52 - 3 * 3);
+      if (result.category === "dealerCard") {
+        // The dealer-card check consumes one card off the deck to reveal it.
+        assert.equal(result.deck.length, 52 - 3 * 3 - 1);
+        assert.ok(result.faceUpCard);
+        assert.ok(result.faceUpCard.rank === "J" || result.faceUpCard.rank === "6");
+      } else {
+        assert.equal(result.deck.length, 52 - 3 * 3);
+      }
     } else {
       assert.equal(result.phase, "matching");
       assert.ok(result.faceUpCard);
@@ -404,6 +411,42 @@ test("dealAndStartRound: an instant-win deal resolves immediately, no matching p
       assert.equal(result.pendingPlacement, null);
     }
   }
+});
+
+test("dealAndStartRound: a J or 6 as the would-be target card wins the pot for the dealer outright", () => {
+  let foundDealerCardWin = false;
+  let foundPriorityCase = false;
+
+  for (let seed = 1; seed <= 1000; seed++) {
+    let s = seed;
+    const rng = () => {
+      s = (s * 9301 + 49297) % 233280;
+      return s / 233280;
+    };
+    const result = engine.dealAndStartRound({ numPlayers: 3, dealerIndex: 1, rng });
+
+    if (result.phase === "instant-win" && result.category === "dealerCard") {
+      foundDealerCardWin = true;
+      // The dealer wins, full stop — this isn't a comparison against hands.
+      assert.deepEqual(result.winnerIndices, [1]);
+      assert.ok(result.faceUpCard.rank === "J" || result.faceUpCard.rank === "6");
+      assert.equal(result.deck.length, 52 - 3 * 3 - 1);
+
+      // If some other hand would ALSO have instant-won on its own merits,
+      // the dealer's card still takes priority — dealAndStartRound checks
+      // it before ever calling evaluateInstantWin.
+      const handBased = engine.evaluateInstantWin(result.hands);
+      if (handBased.hasWinner) {
+        foundPriorityCase = true;
+        // Reported as a dealerCard win regardless of what the hands alone
+        // would have produced.
+        assert.equal(result.category, "dealerCard");
+      }
+    }
+  }
+
+  assert.ok(foundDealerCardWin, "expected at least one seed (of 1000) to produce a dealerCard win");
+  assert.ok(foundPriorityCase, "expected at least one seed to also exercise the priority-over-hands case");
 });
 
 test("dealAndStartRound: never deals the same physical card twice", () => {

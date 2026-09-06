@@ -441,6 +441,24 @@ function dealAndStartRound({ numPlayers, dealerIndex, rng = Math.random }) {
   const shuffled = shuffle(createDeck(), rng);
   const { hands, deck } = deal(shuffled, numPlayers);
 
+  // The card that would become the Matching Phase's target is checked
+  // BEFORE any hand is evaluated: a J or 6 there wins the pot for the
+  // dealer outright, no matter what's in anyone's hand, and takes
+  // priority over the instant-win categories below.
+  const targetCard = deck[0];
+  const deckAfterFlip = deck.slice(1);
+  if (targetCard.rank === "J" || targetCard.rank === "6") {
+    return {
+      phase: "instant-win",
+      hands,
+      deck: deckAfterFlip,
+      faceUpCard: targetCard,
+      winnerIndices: [dealerIndex],
+      category: "dealerCard",
+      dealerIndex,
+    };
+  }
+
   const instant = evaluateInstantWin(hands);
   if (instant.hasWinner) {
     return {
@@ -456,15 +474,12 @@ function dealAndStartRound({ numPlayers, dealerIndex, rng = Math.random }) {
     };
   }
 
-  const faceUpCard = deck[0];
-  const deckAfterFlip = deck.slice(1);
-
   return {
     phase: "matching",
     hands,
     deck: deckAfterFlip,
     tablePile: [],
-    faceUpCard,
+    faceUpCard: targetCard,
     dealerIndex,
     turnIndex: (dealerIndex + 1) % numPlayers,
     winnerIndex: null,
