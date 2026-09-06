@@ -23,6 +23,7 @@ export default function HomeScreen({ onEnterRoom }) {
   const [joinCode, setJoinCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [showServerField, setShowServerField] = useState(false);
 
   const fadeIn = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -100,20 +101,28 @@ export default function HomeScreen({ onEnterRoom }) {
           <Text style={styles.subtitle}>Choose your pack, join the table.</Text>
         </Animated.View>
 
-        <Text style={styles.label}>Server address</Text>
-        <TextInput
-          style={styles.input}
-          value={serverUrl}
-          onChangeText={setServerUrl}
-          autoCapitalize="none"
-          autoCorrect={false}
-          placeholder="https://pickthepack.onrender.com"
-          placeholderTextColor="#8b8b8b"
-        />
-        <Text style={styles.hint}>
-          Your computer's LAN IP + port while the server runs locally (not "localhost" — see the
-          README), or a hosted "https://..." address if you've deployed the server — see DEPLOYMENT.md.
-        </Text>
+        {showServerField ? (
+          <>
+            <Text style={styles.label}>Server address</Text>
+            <TextInput
+              style={styles.input}
+              value={serverUrl}
+              onChangeText={setServerUrl}
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder="https://pickthepack.onrender.com"
+              placeholderTextColor="#8b8b8b"
+            />
+            <Text style={styles.hint}>
+              Your computer's LAN IP + port while the server runs locally (not "localhost" — see the
+              README), or a hosted "https://..." address if you've deployed the server — see DEPLOYMENT.md.
+            </Text>
+          </>
+        ) : (
+          <TouchableOpacity onPress={() => setShowServerField(true)} activeOpacity={0.7}>
+            <Text style={styles.advancedLink}>Advanced: change server address</Text>
+          </TouchableOpacity>
+        )}
 
         <Text style={styles.label}>Your name</Text>
         <TextInput
@@ -208,6 +217,7 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 14, color: "#c9d8cf", textAlign: "center", marginBottom: 24 },
   label: { color: "#e6efe9", marginTop: 12, marginBottom: 4, fontWeight: "600" },
   hint: { color: "#93a99c", fontSize: 12, marginBottom: 4 },
+  advancedLink: { color: "#93a99c", fontSize: 12, marginTop: 8, textDecorationLine: "underline" },
   input: {
     backgroundColor: "rgba(255,255,255,0.92)",
     borderRadius: 10,
