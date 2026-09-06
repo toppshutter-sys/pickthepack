@@ -73,3 +73,38 @@ test("leaveRoom: a socket not seated in the room throws", () => {
   const { rooms, room } = seatRoom(["Ann", "Bo"]);
   assert.throws(() => rooms.leaveRoom(room.code, "stranger"), /not seated/);
 });
+
+test("startRound: from the lobby (no winner yet), any seated player may start it", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  // Any of the three socket ids should be accepted for the very first round.
+  const after = rooms.startRound(room.code, "s2");
+  assert.notEqual(after.status, "lobby");
+});
+
+test("startRound: after a round ends, only the winner (now dealerIndex) may deal the next one", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  let r;
+  do {
+    r = rooms.startRound(room.code, "s0");
+  } while (r.status !== "round-over");
+
+  const winnerSocketId = `s${r.dealerIndex}`;
+  const loserSocketId = r.dealerIndex === 0 ? "s1" : "s0";
+
+  assert.throws(
+    () => rooms.startRound(room.code, loserSocketId),
+    /who won the last round, can deal the next one/
+  );
+  // The winner themself is unaffected by that rejection and can still deal.
+  assert.doesNotThrow(() => rooms.startRound(room.code, winnerSocketId));
+});
+
+test("startRound: omitting socketId (internal/test callers) skips the winner check", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  let r;
+  do {
+    r = rooms.startRound(room.code);
+  } while (r.status !== "round-over");
+  // No socketId passed — should not throw even though a winner is set.
+  assert.doesNotThrow(() => rooms.startRound(room.code));
+});

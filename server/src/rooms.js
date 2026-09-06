@@ -53,6 +53,7 @@ class RoomManager {
       status: "lobby", // lobby | round-active | round-over
       round: null, // engine state (phase: 'instant-win' | 'matching')
       log: [],
+      lastKnock: null, // { playerIdx, card } — the most recent knock this round, for the client's knock indicator
     };
     this.rooms.set(code, room);
     return room;
@@ -130,11 +131,21 @@ class RoomManager {
    * either an instant win pays out immediately, or the Matching Phase
    * begins with those same hands.
    */
-  startRound(code) {
+  startRound(code, socketId) {
     const room = this.rooms.get(code);
     if (!room) throw new Error("Room not found");
     if (room.players.length < 2) throw new Error("Need at least 2 players");
+    // Once a round has been played, dealerIndex IS the winner of it (see
+    // below) — only they may deal the next one. The very first round, from
+    // the lobby, has no winner yet, so anyone may start it.
+    if (room.status === "round-over" && socketId !== undefined) {
+      const winner = room.players[room.dealerIndex];
+      if (winner.id !== socketId) {
+        throw new Error(`Only ${winner.name}, who won the last round, can deal the next one`);
+      }
+    }
 
+    room.lastKnock = null;
     for (const p of room.players) p.totalContributed += room.packAmount;
     room.potAmount += room.packAmount * room.players.length;
 
@@ -201,6 +212,9 @@ class RoomManager {
 
   _applyTurnResult(room, actingPlayer, after) {
     room.round = after;
+    if (after.action && after.action.type.startsWith("knock")) {
+      room.lastKnock = { playerIdx: after.action.playerIdx, card: after.action.card };
+    }
     if (after.winnerIndex !== null && after.winnerIndex !== undefined) {
       room.status = "round-over";
       const potAmount = room.potAmount;
@@ -301,6 +315,9 @@ class RoomManager {
             pendingPlacement: room.round.pendingPlacement ?? null,
             deckCount: room.round.deck ? room.round.deck.length : 0,
             tablePileCount: room.round.tablePile ? room.round.tablePile.length : 0,
+            lastKnock: room.lastKnock
+              ? { playerIdx: room.lastKnock.playerIdx, playerName: room.players[room.lastKnock.playerIdx].name, card: room.lastKnock.card }
+              : null,
           }
         : null,
       log: room.log.slice(-20),

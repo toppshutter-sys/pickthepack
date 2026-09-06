@@ -89,7 +89,7 @@ io.on("connection", (socket) => {
   socket.on(
     "start-round",
     safeHandler(socket, ({ code }, ack) => {
-      const room = rooms.startRound(code);
+      const room = rooms.startRound(code, socket.id);
       ack && ack({ ok: true });
       rooms.broadcastState(room, io);
     })

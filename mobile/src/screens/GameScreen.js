@@ -205,6 +205,10 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
         )}
       </View>
 
+      {!isInstantWin && !isRoundOver && round.lastKnock && (
+        <KnockBanner playerName={round.lastKnock.playerName} card={round.lastKnock.card} />
+      )}
+
       <View style={styles.tableRow}>
         <View style={styles.pileBlock}>
           <Text style={styles.pileLabel}>Deck</Text>
@@ -274,24 +278,43 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
         </Text>
       )}
 
-      {(isInstantWin || isRoundOver) && (
-        <GradientButton onPress={() => act("start-round")} disabled={busy} style={styles.actionButton}>
-          {busy ? "…" : `Deal Next Round ($${packAmount} ante)`}
-        </GradientButton>
-      )}
-
-      <GlassPanel style={styles.log}>
-        <Text style={styles.logTitle}>Table log</Text>
-        {roomState.log
-          .slice()
-          .reverse()
-          .map((entry, i) => (
-            <Text key={i} style={styles.logLine}>
-              {entry.message}
-            </Text>
-          ))}
-      </GlassPanel>
+      {(isInstantWin || isRoundOver) &&
+        (you === roomState.dealerIndex ? (
+          <GradientButton onPress={() => act("start-round")} disabled={busy} style={styles.actionButton}>
+            {busy ? "…" : `Deal Next Round ($${packAmount} ante)`}
+          </GradientButton>
+        ) : (
+          <Text style={styles.waitingText}>
+            Waiting for {players[roomState.dealerIndex].name} — winner of the last round — to deal the next one
+          </Text>
+        ))}
     </ScrollView>
+  );
+}
+
+/** A clear, dedicated callout for the most recent knock — pops in fresh each time. */
+function KnockBanner({ playerName, card }) {
+  const enter = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    enter.setValue(0);
+    Animated.spring(enter, { toValue: 1, useNativeDriver: true, speed: 16, bounciness: 8 }).start();
+  }, [card.id, playerName]);
+
+  return (
+    <Animated.View
+      style={{
+        opacity: enter,
+        transform: [{ scale: enter.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1] }) }],
+        width: "100%",
+        marginBottom: 16,
+      }}
+    >
+      <GlassPanel style={styles.knockBanner} borderColor="#f0cd7a">
+        <Text style={styles.knockText}>
+          🔔 {playerName} knocked the {card.rank} of {card.suit}
+        </Text>
+      </GlassPanel>
+    </Animated.View>
   );
 }
 
@@ -338,6 +361,8 @@ const styles = StyleSheet.create({
   },
   winnerTitle: { color: "#2a2107", fontWeight: "800", fontSize: 17, textAlign: "center" },
   winnerCategory: { color: "#4a3a10", fontSize: 13, marginTop: 4 },
+  knockBanner: { paddingVertical: 10, paddingHorizontal: 14, alignItems: "center" },
+  knockText: { color: "#f0cd7a", fontWeight: "700", fontSize: 13 },
   opponents: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", marginBottom: 20 },
   opponentBlock: { alignItems: "center", marginHorizontal: 10, marginBottom: 10 },
   opponentName: { color: "#e6efe9", marginBottom: 4, fontSize: 13 },
@@ -360,7 +385,4 @@ const styles = StyleSheet.create({
   actionButton: { width: "100%", marginBottom: 24 },
   leaveTopButton: { marginBottom: 16 },
   leaveText: { color: "#ffb4b4", fontSize: 14 },
-  log: { width: "100%", padding: 14 },
-  logTitle: { color: "#93a99c", fontWeight: "700", marginBottom: 6 },
-  logLine: { color: "#c9d8cf", fontSize: 12, marginBottom: 4 },
 });
