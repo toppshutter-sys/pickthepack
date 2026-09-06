@@ -18,7 +18,15 @@
       }
     },
     "web": {
-      "bundler": "metro"
+      "bundler": "metro",
+      "name": "Pick the Pack",
+      "shortName": "Pick the Pack",
+      "themeColor": "#0b3d2e",
+      "backgroundColor": "#0b3d2e",
+      "display": "standalone",
+      "orientation": "portrait",
+      "lang": "en",
+      "startUrl": "/"
     },
     "extra": {
       "eas": {
