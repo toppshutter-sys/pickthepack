@@ -50,14 +50,19 @@ export default function LobbyScreen({ socket, roomState, code, onLeaveRoom }) {
   }
 
   const canStart = roomState.players.length >= 2;
+  const hasRoomForMore = roomState.players.length < 6;
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Animated.View style={{ opacity: fadeIn, alignItems: "center", width: "100%" }}>
         <Text style={styles.title}>Table {code}</Text>
-        <TouchableOpacity onPress={handleShare} activeOpacity={0.7}>
-          <Text style={styles.shareHint}>Tap to share the room code</Text>
-        </TouchableOpacity>
+        {hasRoomForMore ? (
+          <TouchableOpacity onPress={handleShare} activeOpacity={0.7}>
+            <Text style={styles.shareHint}>📤 Invite players — WhatsApp, iMessage, text, email…</Text>
+          </TouchableOpacity>
+        ) : (
+          <Text style={styles.shareHint}>Table full (6/6)</Text>
+        )}
 
         <Text style={styles.packLabel}>Pack {roomState.packAmount} — ${roomState.packAmount} buy-in per round</Text>
 

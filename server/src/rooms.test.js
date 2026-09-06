@@ -207,3 +207,42 @@ test("leaveRoom: rejected during awaiting-recast — same load-bearing-indices r
   forceAwaitingRecast(rooms, room);
   assert.throws(() => rooms.leaveRoom(room.code, "s1"), /Can't leave mid-round/);
 });
+
+test("joinRoom: allowed between hands (round-over), not just from the lobby", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo"]);
+  let r;
+  do {
+    r = rooms.startRound(room.code);
+  } while (r.status !== "round-over");
+  const after = rooms.joinRoom({ code: room.code, socketId: "late", playerName: "Cy" });
+  assert.deepEqual(after.players.map((p) => p.name), ["Ann", "Bo", "Cy"]);
+});
+
+test("joinRoom: rejected mid-round (round-active) — no hand to slot a new player into", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo"]);
+  let r;
+  do {
+    r = rooms.startRound(room.code);
+  } while (r.status !== "round-active");
+  assert.throws(
+    () => rooms.joinRoom({ code: room.code, socketId: "late", playerName: "Cy" }),
+    /Round already in progress/
+  );
+});
+
+test("joinRoom: rejected during awaiting-recast", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  forceAwaitingRecast(rooms, room);
+  assert.throws(
+    () => rooms.joinRoom({ code: room.code, socketId: "late", playerName: "Dee" }),
+    /Round already in progress/
+  );
+});
+
+test("joinRoom: capped at 6 players even between hands", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy", "Dee", "Eve", "Fay"]);
+  assert.throws(
+    () => rooms.joinRoom({ code: room.code, socketId: "s6", playerName: "Gus" }),
+    /Room is full/
+  );
+});

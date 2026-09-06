@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Animated, Easing, Alert } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Animated, Easing, Alert, Share } from "react-native";
 import Hand from "../components/Hand";
 import Card from "../components/Card";
 import GradientButton from "../components/GradientButton";
@@ -132,6 +132,10 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
     );
   }
 
+  function handleShare() {
+    Share.share({ message: `Join my Pick the Pack table! Room code: ${code}` }).catch(() => {});
+  }
+
   if (!round) {
     return (
       <View style={styles.container}>
@@ -224,9 +228,16 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
         </GlassPanel>
       </View>
 
-      <TouchableOpacity onPress={handleLeave} disabled={busy} activeOpacity={0.7} style={styles.leaveTopButton}>
-        <Text style={styles.leaveText}>Leave table</Text>
-      </TouchableOpacity>
+      <View style={styles.topLinksRow}>
+        <TouchableOpacity onPress={handleLeave} disabled={busy} activeOpacity={0.7}>
+          <Text style={styles.leaveText}>Leave table</Text>
+        </TouchableOpacity>
+        {isRoundOver && players.length < 6 && (
+          <TouchableOpacity onPress={handleShare} activeOpacity={0.7}>
+            <Text style={styles.inviteText}>📤 Invite players</Text>
+          </TouchableOpacity>
+        )}
+      </View>
 
       {winnerSet.size > 0 && (
         <WinnerBanner
@@ -453,5 +464,7 @@ const styles = StyleSheet.create({
   error: { color: "#ffb4b4", marginBottom: 12 },
   actionButton: { width: "100%", marginBottom: 24 },
   leaveTopButton: { marginBottom: 16 },
+  topLinksRow: { flexDirection: "row", justifyContent: "center", gap: 20, marginBottom: 16 },
   leaveText: { color: "#ffb4b4", fontSize: 14 },
+  inviteText: { color: "#f0cd7a", fontSize: 14 },
 });

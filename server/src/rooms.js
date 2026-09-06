@@ -58,10 +58,20 @@ class RoomManager {
     return room;
   }
 
+  // Joining is allowed from the lobby AND between hands (round-over) — a
+  // new player added there just slots into the array everyone else's
+  // indices already point into (dealerIndex, etc. are all unaffected,
+  // and the next deal simply sizes hands to the new player count). Mid-hand
+  // (round-active / awaiting-recast) is blocked for the same load-bearing-
+  // indices reason leaveRoom blocks leaving then — every hand, the pot,
+  // and turn order are indexed by seat position, and a new player has no
+  // hand yet to slot into an already-dealt round.
   joinRoom({ code, socketId, playerName }) {
     const room = this.rooms.get(code);
     if (!room) throw new Error("Room not found");
-    if (room.status !== "lobby") throw new Error("Round already in progress — wait for it to finish");
+    if (room.status === "round-active" || room.status === "awaiting-recast") {
+      throw new Error("Round already in progress — wait for it to finish");
+    }
     if (room.players.length >= 6) throw new Error("Room is full (max 6 players)");
     if (room.players.some((p) => p.id === socketId)) throw new Error("Already in this room");
     room.players.push({ id: socketId, name: playerName, connected: true, totalContributed: 0, totalWon: 0 });
