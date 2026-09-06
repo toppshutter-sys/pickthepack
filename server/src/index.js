@@ -22,13 +22,14 @@ app.get("/health", (req, res) => {
 // is copied into ./public at deploy time — see DEPLOYMENT.md. Serving it
 // from this same server means the web app and the game server share one
 // origin (no CORS to configure between them) and one Render service.
+// No wildcard fallback to index.html here: this app has no client-side
+// routing (every screen is in-memory React state, not a URL) — "/" is
+// already served by express.static's default index-file behavior, and
+// anything else genuinely not found should 404 rather than silently
+// return the app shell.
 const webBuildDir = path.join(__dirname, "..", "public");
 if (fs.existsSync(webBuildDir)) {
   app.use(express.static(webBuildDir));
-  app.get("*", (req, res, next) => {
-    if (req.path === "/health" || req.path.startsWith("/socket.io")) return next();
-    res.sendFile(path.join(webBuildDir, "index.html"));
-  });
 }
 
 const server = http.createServer(app);
