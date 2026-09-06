@@ -118,7 +118,7 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
   }
 
   function handleLeave() {
-    const midRound = roomState.status === "round-active";
+    const midRound = roomState.status === "round-active" || roomState.status === "awaiting-recast";
     Alert.alert(
       "Leave table?",
       midRound
@@ -136,6 +136,59 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
       <View style={styles.container}>
         <Text style={styles.info}>Waiting for the next round…</Text>
       </View>
+    );
+  }
+
+  // A dealer's-card (J/6) win pauses here instead of ending the round —
+  // same dealt hands, no re-deal — until everyone's recast their bet.
+  if (roomState.status === "awaiting-recast") {
+    const iHaveRecast = round.recastReady && round.recastReady[you];
+    return (
+      <ScrollView contentContainerStyle={styles.container}>
+        <View style={styles.headerRow}>
+          <Text style={styles.potText}>Pot: $0</Text>
+          <GlassPanel style={styles.packBadge} radius={999}>
+            <Text style={styles.packText}>Pack {packAmount}</Text>
+          </GlassPanel>
+        </View>
+
+        <TouchableOpacity onPress={handleLeave} disabled={busy} activeOpacity={0.7} style={styles.leaveTopButton}>
+          <Text style={styles.leaveText}>Leave table</Text>
+        </TouchableOpacity>
+
+        <View style={styles.dealerCardBanner}>
+          <Text style={styles.dealerCardTitle}>
+            🃏 {players[roomState.dealerIndex].name} deals the {round.faceUpCard.rank} of {round.faceUpCard.suit}
+          </Text>
+          <Text style={styles.dealerCardSubtitle}>
+            Dealer wins ${round.wonAmount} instantly! Recast your bet to continue with the same hand.
+          </Text>
+        </View>
+
+        <View style={styles.playerList}>
+          {players.map((p, i) => (
+            <GlassPanel key={i} style={styles.recastRow}>
+              <Text style={styles.recastName}>
+                {p.name}
+                {i === you ? " (you)" : ""}
+              </Text>
+              <Text style={round.recastReady[i] ? styles.recastDone : styles.recastPending}>
+                {round.recastReady[i] ? "✓ recast" : p.connected ? "waiting…" : "disconnected"}
+              </Text>
+            </GlassPanel>
+          ))}
+        </View>
+
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+
+        {iHaveRecast ? (
+          <Text style={styles.waitingText}>Waiting for everyone else to recast…</Text>
+        ) : (
+          <GradientButton onPress={() => act("recast-bet")} disabled={busy} style={styles.actionButton}>
+            {busy ? "…" : `Recast $${packAmount} ante`}
+          </GradientButton>
+        )}
+      </ScrollView>
     );
   }
 
@@ -363,6 +416,21 @@ const styles = StyleSheet.create({
   winnerCategory: { color: "#4a3a10", fontSize: 13, marginTop: 4 },
   knockBanner: { paddingVertical: 10, paddingHorizontal: 14, alignItems: "center" },
   knockText: { color: "#f0cd7a", fontWeight: "700", fontSize: 13 },
+  dealerCardBanner: {
+    borderRadius: 12, padding: 16, marginBottom: 16, width: "100%", alignItems: "center",
+    backgroundColor: "#c9a24b",
+    shadowColor: "#c9a24b", shadowOpacity: 0.4, shadowOffset: { width: 0, height: 8 }, shadowRadius: 20, elevation: 6,
+  },
+  dealerCardTitle: { color: "#2a2107", fontWeight: "800", fontSize: 16, textAlign: "center" },
+  dealerCardSubtitle: { color: "#4a3a10", fontSize: 13, marginTop: 6, textAlign: "center" },
+  playerList: { width: "100%", marginBottom: 20 },
+  recastRow: {
+    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+    paddingHorizontal: 14, paddingVertical: 12, marginBottom: 8,
+  },
+  recastName: { color: "#fff", fontSize: 16 },
+  recastDone: { color: "#7fd6a6", fontSize: 13, fontWeight: "700" },
+  recastPending: { color: "#93a99c", fontSize: 13 },
   opponents: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", marginBottom: 20 },
   opponentBlock: { alignItems: "center", marginHorizontal: 10, marginBottom: 10 },
   opponentName: { color: "#e6efe9", marginBottom: 4, fontSize: 13 },

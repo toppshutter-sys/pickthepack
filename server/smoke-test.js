@@ -49,6 +49,13 @@ function buildServer() {
         rooms.broadcastState(room, io);
       } catch (e) { ack({ ok: false, error: e.message }); }
     });
+    socket.on("recast-bet", ({ code }, ack) => {
+      try {
+        const room = rooms.recastBet(code, socket.id);
+        ack({ ok: true });
+        rooms.broadcastState(room, io);
+      } catch (e) { ack({ ok: false, error: e.message }); }
+    });
     socket.on("tap-card", ({ code, cardId, targetCardId }, ack) => {
       try {
         const room = rooms.tapCard(code, socket.id, cardId, targetCardId);
@@ -89,7 +96,14 @@ function assert(cond, msg) {
 }
 
 function checkHandPrivacyDuringMatching(state, viewerIdx) {
-  if (state.round.phase !== "matching" || state.status === "round-over") return; // nothing to hide otherwise
+  // Hands stay hidden during an active Matching Phase AND during the
+  // dealer-card-win recast pause (same hands, not yet revealed either).
+  if (
+    (state.round.phase !== "matching" && state.round.phase !== "dealer-card-win") ||
+    state.status === "round-over"
+  ) {
+    return;
+  }
   state.round.hands.forEach((hand, i) => {
     if (i === viewerIdx) return;
     for (const card of hand) {
@@ -115,6 +129,45 @@ async function playOneRound(alice, bob, code, packAmount) {
   const startP2 = new Promise((r) => bob.once("room-state", r));
   await emitAck(alice, "start-round", { code });
   let [aliceState, bobState] = await Promise.all([startP1, startP2]);
+
+  // A dealer's-card (J/6) win pauses the round for a recast instead of
+  // ending it — possibly more than once in a row. Resolve all of those
+  // (both players recasting each time) before checking the real outcome,
+  // asserting throughout that it's the SAME dealt hand, never re-dealt.
+  let dealerCardWins = 0;
+  let recastGuard = 0;
+  while (aliceState.round.phase === "dealer-card-win" && recastGuard < 20) {
+    recastGuard++;
+    dealerCardWins++;
+    assert(aliceState.status === "awaiting-recast", "a dealer-card-win should pause for a recast, not end the round");
+    assert(aliceState.round.wonAmount > 0, "should report what the dealer just won");
+    assert(aliceState.potAmount === 0, "the won pot should already be paid out");
+    checkHandPrivacyDuringMatching(aliceState, aliceState.you);
+    checkHandPrivacyDuringMatching(bobState, bobState.you);
+    const aliceHandBefore = aliceState.round.hands[aliceState.you].map((c) => c.id);
+    const bobHandBefore = bobState.round.hands[bobState.you].map((c) => c.id);
+
+    const p1a = new Promise((r) => alice.once("room-state", r));
+    const p2a = new Promise((r) => bob.once("room-state", r));
+    await emitAck(alice, "recast-bet", { code });
+    [aliceState, bobState] = await Promise.all([p1a, p2a]);
+
+    const p1b = new Promise((r) => alice.once("room-state", r));
+    const p2b = new Promise((r) => bob.once("room-state", r));
+    await emitAck(bob, "recast-bet", { code });
+    [aliceState, bobState] = await Promise.all([p1b, p2b]);
+
+    assert(
+      JSON.stringify(aliceState.round.hands[aliceState.you].map((c) => c.id)) === JSON.stringify(aliceHandBefore),
+      "alice's hand must be unchanged across a recast — no re-deal"
+    );
+    assert(
+      JSON.stringify(bobState.round.hands[bobState.you].map((c) => c.id)) === JSON.stringify(bobHandBefore),
+      "bob's hand must be unchanged across a recast — no re-deal"
+    );
+  }
+  assert(recastGuard < 20, "dealer-card-win/recast cycle did not converge — possible infinite loop");
+  if (dealerCardWins > 0) console.log(`  DEALER'S CARD: won and recast ${dealerCardWins} time(s) before the round actually started`);
 
   assert(aliceState.potAmount === (aliceState.round.phase === "instant-win" ? 0 : packAmount * 2),
     "pot should reflect both antes (already paid out if instant win)");

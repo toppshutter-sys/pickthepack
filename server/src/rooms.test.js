@@ -108,3 +108,102 @@ test("startRound: omitting socketId (internal/test callers) skips the winner che
   // No socketId passed — should not throw even though a winner is set.
   assert.doesNotThrow(() => rooms.startRound(room.code));
 });
+
+/** Re-deals until the round lands on a dealer's-card win (awaiting-recast). */
+function forceAwaitingRecast(rooms, room) {
+  let r;
+  do {
+    r = rooms.startRound(room.code);
+  } while (r.status !== "awaiting-recast");
+  return r;
+}
+
+test("recastBet: a dealer's-card win pauses the round without ending it or re-dealing", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  const r = forceAwaitingRecast(rooms, room);
+  assert.equal(r.round.phase, "dealer-card-win");
+  assert.ok(r.round.faceUpCard.rank === "J" || r.round.faceUpCard.rank === "6");
+  assert.equal(r.potAmount, 0); // paid out to the dealer already
+  assert.ok(r.round.wonAmount > 0);
+  assert.equal(r.dealerIndex, room.dealerIndex); // dealer unchanged — they keep dealing
+});
+
+test("recastBet: the round only proceeds once every connected player has recast", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  const before = forceAwaitingRecast(rooms, room);
+  const originalHands = before.round.hands;
+
+  let after = rooms.recastBet(room.code, "s0");
+  assert.equal(after.status, "awaiting-recast", "still waiting on Bo and Cy");
+  after = rooms.recastBet(room.code, "s1");
+  assert.equal(after.status, "awaiting-recast", "still waiting on Cy");
+  after = rooms.recastBet(room.code, "s2");
+  // Everyone's recast now — should have moved on (to another
+  // awaiting-recast if it repeated, or to round-active/round-over).
+  assert.notEqual(after.status, "lobby");
+  if (after.status === "awaiting-recast") {
+    assert.deepEqual(after.round.hands, originalHands, "no re-deal on a repeat");
+  } else {
+    assert.deepEqual(after.round.hands, originalHands, "same hands carried into the real round");
+  }
+});
+
+test("recastBet: ante is collected again from everyone on the recast", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  forceAwaitingRecast(rooms, room);
+  const contributedBefore = room.players.map((p) => p.totalContributed);
+
+  rooms.recastBet(room.code, "s0");
+  rooms.recastBet(room.code, "s1");
+  const after = rooms.recastBet(room.code, "s2");
+
+  after.players.forEach((p, i) => {
+    assert.equal(p.totalContributed, contributedBefore[i] + room.packAmount);
+  });
+});
+
+test("recastBet: rejected when nothing is awaiting recast", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo"]);
+  assert.throws(() => rooms.recastBet(room.code, "s0"), /Nothing to recast right now/);
+});
+
+test("recastBet: rejected for a socket not seated in the room", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  forceAwaitingRecast(rooms, room);
+  assert.throws(() => rooms.recastBet(room.code, "stranger"), /not seated/);
+});
+
+test("recastBet: a disconnected player is skipped, not waited on", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  forceAwaitingRecast(rooms, room);
+  rooms.markDisconnected("s2"); // Cy vanishes instead of recasting
+  rooms.recastBet(room.code, "s0");
+  const after = rooms.recastBet(room.code, "s1");
+  // Only Ann and Bo needed to recast — Cy being disconnected shouldn't
+  // block progress. It may legitimately land right back on another
+  // dealer-card-win (a fresh cycle) — the thing to prove is that it's a
+  // NEW cycle (recastReady reset), not the same one still stuck on Cy.
+  if (after.status === "awaiting-recast") {
+    assert.equal(after.recastReady.size, 0, "fresh cycle, not still stuck waiting on this one");
+  }
+});
+
+test("recastBet: the last holdout disconnecting resolves the wait automatically", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  forceAwaitingRecast(rooms, room);
+  rooms.recastBet(room.code, "s0");
+  rooms.recastBet(room.code, "s1");
+  // Cy is the only holdout — disconnecting them (instead of recasting)
+  // should resolve the round rather than leaving it stuck forever (it
+  // may legitimately land on a fresh dealer-card-win cycle instead).
+  const after = rooms.markDisconnected("s2");
+  if (after.status === "awaiting-recast") {
+    assert.equal(after.recastReady.size, 0, "fresh cycle, not still stuck waiting on this one");
+  }
+});
+
+test("leaveRoom: rejected during awaiting-recast — same load-bearing-indices reasoning as round-active", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  forceAwaitingRecast(rooms, room);
+  assert.throws(() => rooms.leaveRoom(room.code, "s1"), /Can't leave mid-round/);
+});

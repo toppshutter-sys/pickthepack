@@ -27,7 +27,6 @@ const CATEGORY_LABEL = {
   ace23: "Ace-2-3 Sequence",
   sequential: "a Sequence",
   flush: "Same-Suit (Flush)",
-  dealerCard: "the Dealer's Card (J or 6)",
 };
 
 class RoomManager {
@@ -80,7 +79,7 @@ class RoomManager {
   leaveRoom(code, socketId) {
     const room = this.rooms.get(code);
     if (!room) throw new Error("Room not found");
-    if (room.status === "round-active") {
+    if (room.status === "round-active" || room.status === "awaiting-recast") {
       throw new Error("Can't leave mid-round — finish this hand first");
     }
     const idx = room.players.findIndex((p) => p.id === socketId);
@@ -118,6 +117,9 @@ class RoomManager {
     if (!room) return null;
     const player = room.players.find((p) => p.id === socketId);
     if (player) player.connected = false;
+    // If everyone else had already recast and this was the last holdout,
+    // their disconnecting shouldn't leave the table stuck waiting forever.
+    this._maybeResolveRecast(room);
     return room;
   }
 
@@ -127,9 +129,10 @@ class RoomManager {
   }
 
   /**
-   * Deals a fresh hand and resolves the round: everyone antes, then
-   * either an instant win pays out immediately, or the Matching Phase
-   * begins with those same hands.
+   * Deals a fresh hand (once per round-cycle) and resolves the opening
+   * state: a dealer's-card win pauses for a recast (see recastBet below)
+   * rather than ending the round; otherwise an instant win pays out
+   * immediately, or the Matching Phase begins with those same hands.
    */
   startRound(code, socketId) {
     const room = this.rooms.get(code);
@@ -146,15 +149,69 @@ class RoomManager {
     }
 
     room.lastKnock = null;
-    for (const p of room.players) p.totalContributed += room.packAmount;
-    room.potAmount += room.packAmount * room.players.length;
+    const { hands, deck } = engine.dealHands(room.players.length);
+    this._collectAnte(room);
+    this._resolveTarget(room, hands, deck);
+    return room;
+  }
 
-    const result = engine.dealAndStartRound({
-      numPlayers: room.players.length,
-      dealerIndex: room.dealerIndex,
-    });
+  /**
+   * A player confirms they want to continue after a dealer's-card win —
+   * once every still-connected player has done this, the ante is
+   * collected again and the SAME hands (no re-deal) are checked against
+   * the next card, which may itself be another J/6 (repeats) or the real
+   * start of the round. Leaving instead of recasting goes through the
+   * normal disconnect path (see forfeit-and-leave client-side), not this.
+   */
+  recastBet(code, socketId) {
+    const room = this.rooms.get(code);
+    if (!room) throw new Error("Room not found");
+    if (room.status !== "awaiting-recast") throw new Error("Nothing to recast right now");
+    const player = room.players.find((p) => p.id === socketId);
+    if (!player) throw new Error("You're not seated in this room");
+    if (!player.connected) throw new Error("You're disconnected");
 
+    room.recastReady.add(socketId);
+    this._maybeResolveRecast(room);
+    return room;
+  }
+
+  /** If everyone still connected has recast, collects ante and checks the next card. */
+  _maybeResolveRecast(room) {
+    if (room.status !== "awaiting-recast") return;
+    const stillWaiting = room.players.some((p) => p.connected && !room.recastReady.has(p.id));
+    if (stillWaiting) return;
+    const { hands, deck } = room.round;
+    this._collectAnte(room);
+    this._resolveTarget(room, hands, deck);
+  }
+
+  /** Ante collection, skipping anyone currently disconnected. */
+  _collectAnte(room) {
+    const activePlayers = room.players.filter((p) => p.connected);
+    for (const p of activePlayers) p.totalContributed += room.packAmount;
+    room.potAmount += room.packAmount * activePlayers.length;
+  }
+
+  /** Checks `hands`/`deck` against the engine and applies whatever phase comes back. */
+  _resolveTarget(room, hands, deck) {
+    const result = engine.resolveOpeningTarget({ hands, deck, dealerIndex: room.dealerIndex });
     room.round = result;
+
+    if (result.phase === "dealer-card-win") {
+      room.status = "awaiting-recast";
+      room.recastReady = new Set();
+      const dealerName = room.players[room.dealerIndex].name;
+      const wonAmount = room.potAmount;
+      room.players[room.dealerIndex].totalWon += wonAmount;
+      room.round.wonAmount = wonAmount; // stashed for client display before the pot resets below
+      this.addLog(
+        room,
+        `${dealerName} deals a ${result.faceUpCard.rank} of ${result.faceUpCard.suit} — dealer wins the $${wonAmount} pot! Recast your bet to continue.`
+      );
+      room.potAmount = 0;
+      return;
+    }
 
     if (result.phase === "instant-win") {
       room.status = "round-over";
@@ -169,26 +226,19 @@ class RoomManager {
         this.addLog(room, `Split pot! ${names} tied on the deal with ${categoryLabel} and share $${potAmount} ($${share.toFixed(2)} each).`);
       } else {
         const winnerName = room.players[winners[0]].name;
-        if (result.category === "dealerCard") {
-          this.addLog(
-            room,
-            `${winnerName} deals a ${result.faceUpCard.rank} of ${result.faceUpCard.suit} — dealer wins the $${potAmount} pot instantly!`
-          );
-        } else {
-          this.addLog(room, `${winnerName} wins the $${potAmount} pot instantly with ${categoryLabel}!`);
-        }
+        this.addLog(room, `${winnerName} wins the $${potAmount} pot instantly with ${categoryLabel}!`);
       }
       room.dealerIndex = winners[0]; // winner deals next
       room.potAmount = 0;
-    } else {
-      room.status = "round-active";
-      this.addLog(
-        room,
-        `Deal complete — no instant win. Target card: ${result.faceUpCard.rank} of ${result.faceUpCard.suit}. Matching Phase begins.`
-      );
+      return;
     }
 
-    return room;
+    // matching
+    room.status = "round-active";
+    this.addLog(
+      room,
+      `Deal complete — no instant win. Target card: ${result.faceUpCard.rank} of ${result.faceUpCard.suit}. Matching Phase begins.`
+    );
   }
 
 /**
@@ -318,6 +368,8 @@ class RoomManager {
             lastKnock: room.lastKnock
               ? { playerIdx: room.lastKnock.playerIdx, playerName: room.players[room.lastKnock.playerIdx].name, card: room.lastKnock.card }
               : null,
+            wonAmount: room.round.wonAmount ?? null,
+            recastReady: room.recastReady ? room.players.map((p) => room.recastReady.has(p.id)) : null,
           }
         : null,
       log: room.log.slice(-20),

@@ -95,6 +95,17 @@ io.on("connection", (socket) => {
     })
   );
 
+  // A dealer's-card (J/6) win pauses the round for everyone to confirm
+  // they want to re-ante and continue with the same dealt hands.
+  socket.on(
+    "recast-bet",
+    safeHandler(socket, ({ code }, ack) => {
+      const room = rooms.recastBet(code, socket.id);
+      ack && ack({ ok: true });
+      rooms.broadcastState(room, io);
+    })
+  );
+
   // Player tapped one of their own cards, asserting it matches the target.
   // Allowed for any seated player at any moment (matching is a free-for-all).
   // targetCardId is the id of the face-up card the client last saw — lets

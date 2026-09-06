@@ -431,30 +431,41 @@ function playMatchingTurn(state, rng = Math.random) {
 // Orchestration: deal, check instant win, otherwise start the Matching Phase
 // ---------------------------------------------------------------------
 
-/**
- * Deals a fresh hand and resolves the round's opening state:
- *   { phase: 'instant-win', hands, winnerIndices, category }
- *   or
- *   { phase: 'matching', hands, deck, tablePile, faceUpCard, dealerIndex, turnIndex, winnerIndex: null }
- */
-function dealAndStartRound({ numPlayers, dealerIndex, rng = Math.random }) {
+/** Shuffles a fresh deck and deals hands — the ONE deal for a round-cycle. */
+function dealHands(numPlayers, rng = Math.random) {
   const shuffled = shuffle(createDeck(), rng);
-  const { hands, deck } = deal(shuffled, numPlayers);
+  return deal(shuffled, numPlayers);
+}
 
-  // The card that would become the Matching Phase's target is checked
-  // BEFORE any hand is evaluated: a J or 6 there wins the pot for the
-  // dealer outright, no matter what's in anyone's hand, and takes
-  // priority over the instant-win categories below.
+/**
+ * Resolves the opening state for already-dealt hands against the given
+ * remaining deck, checking (in priority order): the dealer's card (a J or
+ * 6 as the would-be target wins the CURRENT pot for the dealer outright,
+ * before any hand is looked at), then the instant-win categories, then
+ * falling into the Matching Phase.
+ *
+ * A dealer's-card win does NOT end the round or re-deal — the same hands
+ * are still in play, waiting on everyone to recast their bet. The caller
+ * (rooms.js) collects that recast, then calls this again with these same
+ * `hands` and the deck already advanced past the consumed card, to check
+ * the next one — repeating for as long as it keeps coming up J/6.
+ *
+ * Returns one of:
+ *   { phase: 'dealer-card-win', hands, deck, faceUpCard, dealerIndex }
+ *   { phase: 'instant-win', hands, deck, winnerIndices, category, dealerIndex }
+ *   { phase: 'matching', hands, deck, tablePile, faceUpCard, dealerIndex, turnIndex, winnerIndex: null, pendingPlacement: null }
+ */
+function resolveOpeningTarget({ hands, deck, dealerIndex }) {
+  const numPlayers = hands.length;
   const targetCard = deck[0];
   const deckAfterFlip = deck.slice(1);
+
   if (targetCard.rank === "J" || targetCard.rank === "6") {
     return {
-      phase: "instant-win",
+      phase: "dealer-card-win",
       hands,
       deck: deckAfterFlip,
       faceUpCard: targetCard,
-      winnerIndices: [dealerIndex],
-      category: "dealerCard",
       dealerIndex,
     };
   }
@@ -464,9 +475,9 @@ function dealAndStartRound({ numPlayers, dealerIndex, rng = Math.random }) {
     return {
       phase: "instant-win",
       hands,
-      // No card gets flipped on an instant win, but the deck itself should
-      // still be shown at the table (its count, face-down) — this is the
-      // full remaining deck after dealing, untouched.
+      // No card gets flipped on a hand-based instant win, but the deck
+      // itself should still be shown at the table (its count, face-down)
+      // — this is the full remaining deck after dealing, untouched.
       deck,
       winnerIndices: instant.winnerIndices,
       category: instant.category,
@@ -485,6 +496,18 @@ function dealAndStartRound({ numPlayers, dealerIndex, rng = Math.random }) {
     winnerIndex: null,
     pendingPlacement: null,
   };
+}
+
+/**
+ * Convenience one-shot wrapper: deals fresh hands and resolves the
+ * opening state, exactly once. Used by simple callers/tests that don't
+ * need to simulate a dealer-card-win's recast cycle — rooms.js calls
+ * dealHands/resolveOpeningTarget separately instead, since it needs to
+ * hold the state open across that cycle's socket round-trips.
+ */
+function dealAndStartRound({ numPlayers, dealerIndex, rng = Math.random }) {
+  const { hands, deck } = dealHands(numPlayers, rng);
+  return resolveOpeningTarget({ hands, deck, dealerIndex });
 }
 
 module.exports = {
@@ -508,5 +531,7 @@ module.exports = {
   placeTarget,
   flipFromDeck,
   playMatchingTurn,
+  dealHands,
+  resolveOpeningTarget,
   dealAndStartRound,
 };

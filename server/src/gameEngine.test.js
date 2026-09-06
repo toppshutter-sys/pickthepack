@@ -389,20 +389,17 @@ test("dealAndStartRound: an instant-win deal resolves immediately, no matching p
     const result = engine.dealAndStartRound({ numPlayers: 3, dealerIndex: 0, rng });
     assert.equal(result.hands.length, 3);
     for (const hand of result.hands) assert.equal(hand.length, 3);
-    if (result.phase === "instant-win") {
+    if (result.phase === "dealer-card-win") {
+      assert.ok(result.faceUpCard.rank === "J" || result.faceUpCard.rank === "6");
+      // The dealer-card check consumes one card off the deck to reveal it.
+      assert.equal(result.deck.length, 52 - 3 * 3 - 1);
+    } else if (result.phase === "instant-win") {
       assert.ok(result.winnerIndices.length >= 1);
       assert.ok(result.category);
       // The deck must still be present (and correctly sized) so the table UI
       // can keep showing it even though no card gets flipped on an instant win.
       assert.ok(Array.isArray(result.deck));
-      if (result.category === "dealerCard") {
-        // The dealer-card check consumes one card off the deck to reveal it.
-        assert.equal(result.deck.length, 52 - 3 * 3 - 1);
-        assert.ok(result.faceUpCard);
-        assert.ok(result.faceUpCard.rank === "J" || result.faceUpCard.rank === "6");
-      } else {
-        assert.equal(result.deck.length, 52 - 3 * 3);
-      }
+      assert.equal(result.deck.length, 52 - 3 * 3);
     } else {
       assert.equal(result.phase, "matching");
       assert.ok(result.faceUpCard);
@@ -413,7 +410,7 @@ test("dealAndStartRound: an instant-win deal resolves immediately, no matching p
   }
 });
 
-test("dealAndStartRound: a J or 6 as the would-be target card wins the pot for the dealer outright", () => {
+test("resolveOpeningTarget: a J or 6 as the would-be target card wins the pot for the dealer outright, without ending the round", () => {
   let foundDealerCardWin = false;
   let foundPriorityCase = false;
 
@@ -423,30 +420,59 @@ test("dealAndStartRound: a J or 6 as the would-be target card wins the pot for t
       s = (s * 9301 + 49297) % 233280;
       return s / 233280;
     };
-    const result = engine.dealAndStartRound({ numPlayers: 3, dealerIndex: 1, rng });
+    const { hands, deck } = engine.dealHands(3, rng);
+    const result = engine.resolveOpeningTarget({ hands, deck, dealerIndex: 1 });
 
-    if (result.phase === "instant-win" && result.category === "dealerCard") {
+    if (result.phase === "dealer-card-win") {
       foundDealerCardWin = true;
-      // The dealer wins, full stop — this isn't a comparison against hands.
-      assert.deepEqual(result.winnerIndices, [1]);
+      // Doesn't end the round — same hands, deck just advanced past the
+      // consumed card, ready for the caller to collect a recast and check
+      // the next one.
+      assert.deepEqual(result.hands, hands);
       assert.ok(result.faceUpCard.rank === "J" || result.faceUpCard.rank === "6");
-      assert.equal(result.deck.length, 52 - 3 * 3 - 1);
+      assert.equal(result.deck.length, deck.length - 1);
+      assert.equal(result.dealerIndex, 1);
 
       // If some other hand would ALSO have instant-won on its own merits,
-      // the dealer's card still takes priority — dealAndStartRound checks
-      // it before ever calling evaluateInstantWin.
-      const handBased = engine.evaluateInstantWin(result.hands);
-      if (handBased.hasWinner) {
-        foundPriorityCase = true;
-        // Reported as a dealerCard win regardless of what the hands alone
-        // would have produced.
-        assert.equal(result.category, "dealerCard");
-      }
+      // the dealer's card still takes priority — resolveOpeningTarget
+      // checks it before ever calling evaluateInstantWin.
+      const handBased = engine.evaluateInstantWin(hands);
+      if (handBased.hasWinner) foundPriorityCase = true;
     }
   }
 
-  assert.ok(foundDealerCardWin, "expected at least one seed (of 1000) to produce a dealerCard win");
+  assert.ok(foundDealerCardWin, "expected at least one seed (of 1000) to produce a dealer-card-win");
   assert.ok(foundPriorityCase, "expected at least one seed to also exercise the priority-over-hands case");
+});
+
+test("resolveOpeningTarget: repeated calls with the advanced deck keep checking until a non-J/6 target resolves the round", () => {
+  // Find a seed whose deal produces at least two dealer-card wins in a row
+  // before something else resolves it, to prove the repeat behavior works
+  // (not just a single check).
+  for (let seed = 1; seed <= 2000; seed++) {
+    let s = seed;
+    const rng = () => {
+      s = (s * 9301 + 49297) % 233280;
+      return s / 233280;
+    };
+    const { hands, deck } = engine.dealHands(3, rng);
+    let result = engine.resolveOpeningTarget({ hands, deck, dealerIndex: 0 });
+    if (result.phase !== "dealer-card-win") continue;
+
+    let repeats = 1;
+    while (result.phase === "dealer-card-win" && repeats < 10) {
+      const next = engine.resolveOpeningTarget({ hands: result.hands, deck: result.deck, dealerIndex: 0 });
+      assert.deepEqual(next.hands, hands, "hands must never change across repeats");
+      result = next;
+      repeats++;
+    }
+    assert.notEqual(result.phase, "dealer-card-win");
+    if (repeats >= 2) return; // found and verified a multi-repeat case — done
+  }
+  // Not finding one in 2000 seeds isn't itself a failure of the feature
+  // (roughly an 18.6% chance per check, so ~2 in a row is already rare) —
+  // the single-repeat behavior above is what actually matters and is
+  // covered by the previous test either way.
 });
 
 test("dealAndStartRound: never deals the same physical card twice", () => {
@@ -470,6 +496,7 @@ test("dealAndStartRound: never deals the same physical card twice", () => {
 test("full simulation: matching-phase rounds always converge to exactly one winner", () => {
   let matchingRoundsSeen = 0;
   let instantWinRoundsSeen = 0;
+  let dealerCardWinsSeen = 0;
   for (let seed = 1; seed <= 60; seed++) {
     let s = seed;
     const rng = () => {
@@ -477,6 +504,13 @@ test("full simulation: matching-phase rounds always converge to exactly one winn
       return s / 233280;
     };
     let state = engine.dealAndStartRound({ numPlayers: 3, dealerIndex: 0, rng });
+    // A dealer-card win doesn't end the round — simulate an immediate
+    // recast (as the room layer would after everyone responds) and keep
+    // checking the next card the same way real play does.
+    while (state.phase === "dealer-card-win") {
+      dealerCardWinsSeen++;
+      state = engine.resolveOpeningTarget({ hands: state.hands, deck: state.deck, dealerIndex: state.dealerIndex });
+    }
     if (state.phase === "instant-win") {
       instantWinRoundsSeen++;
       continue;
