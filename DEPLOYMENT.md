@@ -69,6 +69,25 @@ so people don't have to type it, change the initial value of `serverUrl` in
 For the standalone browser demo (`pick-the-pack-demo.html`) — that one runs entirely client-side
 with no server at all, so this doesn't apply to it; it stays a local preview either way.
 
+## Playing in a browser (no app install, no Expo Go, no Apple Developer account)
+
+The same mobile app also runs as a web app via Expo's web support — this is the easiest way for
+anyone to play without installing anything, especially on iPhone where a real standalone app build
+requires a paid Apple Developer account.
+
+Render builds and serves it automatically: `render.yaml`'s build command runs
+`npx expo export -p web --output-dir ../server/public` after installing the server's own
+dependencies, and `server/src/index.js` serves that folder as static files (falling back to
+`index.html` for any route that isn't `/health` or `/socket.io`) — so the web app and the game
+server are the same Render service, same URL, no CORS to configure between them.
+
+To open it: visit your server's URL directly in a browser (e.g. `https://pickthepack.onrender.com`)
+on any device. The server-address field on the home screen defaults to that same URL, so there's
+nothing to type — just a name and a room code.
+
+Running this locally works the same way: `cd mobile && npx expo export -p web --output-dir
+../server/public`, then `cd server && npm start`, then open `http://localhost:4000`.
+
 ## What this doesn't do yet
 
 This gets the server running somewhere everyone can reach — it does *not* add accounts, a paid

@@ -1,6 +1,8 @@
 "use strict";
 
 const http = require("http");
+const path = require("path");
+const fs = require("fs");
 const express = require("express");
 const cors = require("cors");
 const { Server } = require("socket.io");
@@ -15,6 +17,19 @@ app.use(express.json());
 app.get("/health", (req, res) => {
   res.json({ ok: true, service: "pick-the-pack-server" });
 });
+
+// The web build of the mobile app (produced by `npx expo export -p web`)
+// is copied into ./public at deploy time — see DEPLOYMENT.md. Serving it
+// from this same server means the web app and the game server share one
+// origin (no CORS to configure between them) and one Render service.
+const webBuildDir = path.join(__dirname, "..", "public");
+if (fs.existsSync(webBuildDir)) {
+  app.use(express.static(webBuildDir));
+  app.get("*", (req, res, next) => {
+    if (req.path === "/health" || req.path.startsWith("/socket.io")) return next();
+    res.sendFile(path.join(webBuildDir, "index.html"));
+  });
+}
 
 const server = http.createServer(app);
 const io = new Server(server, {
