@@ -1,13 +1,16 @@
 import React, { useEffect, useRef, useState } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Share, Animated, Alert } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Animated } from "react-native";
 import { emitWithAck } from "../socket";
 import GradientButton from "../components/GradientButton";
 import GlassPanel from "../components/GlassPanel";
 import { centeredContent } from "../responsive";
+import { confirmAsync } from "../confirm";
+import { shareInvite } from "../inviteLink";
 
 export default function LobbyScreen({ socket, roomState, code, onLeaveRoom }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   const fadeIn = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -27,7 +30,13 @@ export default function LobbyScreen({ socket, roomState, code, onLeaveRoom }) {
   }
 
   function handleShare() {
-    Share.share({ message: `Join my Pick the Pack table! Room code: ${code}` }).catch(() => {});
+    setLinkCopied(false);
+    shareInvite(code, {
+      onCopied: () => {
+        setLinkCopied(true);
+        setTimeout(() => setLinkCopied(false), 3000);
+      },
+    });
   }
 
   async function leaveRoom() {
@@ -42,11 +51,9 @@ export default function LobbyScreen({ socket, roomState, code, onLeaveRoom }) {
     }
   }
 
-  function handleLeave() {
-    Alert.alert("Leave table?", "You'll give up your seat.", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Leave", style: "destructive", onPress: leaveRoom },
-    ]);
+  async function handleLeave() {
+    const confirmed = await confirmAsync("Leave table?", "You'll give up your seat.", "Leave");
+    if (confirmed) leaveRoom();
   }
 
   const canStart = roomState.players.length >= 2;
@@ -58,7 +65,9 @@ export default function LobbyScreen({ socket, roomState, code, onLeaveRoom }) {
         <Text style={styles.title}>Table {code}</Text>
         {hasRoomForMore ? (
           <TouchableOpacity onPress={handleShare} activeOpacity={0.7}>
-            <Text style={styles.shareHint}>📤 Invite players — WhatsApp, iMessage, text, email…</Text>
+            <Text style={styles.shareHint}>
+              {linkCopied ? "✓ Link copied to clipboard!" : "📤 Invite players — WhatsApp, iMessage, text, email…"}
+            </Text>
           </TouchableOpacity>
         ) : (
           <Text style={styles.shareHint}>Table full (6/6)</Text>

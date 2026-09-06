@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Animated, Easing, Alert, Share } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Animated, Easing } from "react-native";
 import Hand from "../components/Hand";
 import Card from "../components/Card";
 import GradientButton from "../components/GradientButton";
 import GlassPanel from "../components/GlassPanel";
 import { emitWithAck } from "../socket";
 import { centeredContent } from "../responsive";
+import { confirmAsync } from "../confirm";
+import { shareInvite } from "../inviteLink";
 
 function isFlipTurn(round, isInstantWin, isRoundOver, playerIndex) {
   const placementPending =
@@ -24,6 +26,7 @@ const CATEGORY_LABEL = {
 export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [linkCopied, setLinkCopied] = useState(false);
   // Matching is a free-for-all, not turn-based: you tap the target card
   // first to say "I want to try matching this", THEN tap the card in your
   // own hand that you believe matches. Two steps instead of one tap,
@@ -118,22 +121,28 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
     onLeaveRoom();
   }
 
-  function handleLeave() {
+  async function handleLeave() {
     const midRound = roomState.status === "round-active" || roomState.status === "awaiting-recast";
-    Alert.alert(
+    const confirmed = await confirmAsync(
       "Leave table?",
       midRound
         ? "You'll forfeit this hand — your ante stays in the pot — and your seat will show as disconnected."
         : "You'll give up your seat.",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Leave", style: "destructive", onPress: midRound ? forfeitAndLeave : leaveRoom },
-      ]
+      "Leave"
     );
+    if (!confirmed) return;
+    if (midRound) forfeitAndLeave();
+    else leaveRoom();
   }
 
   function handleShare() {
-    Share.share({ message: `Join my Pick the Pack table! Room code: ${code}` }).catch(() => {});
+    setLinkCopied(false);
+    shareInvite(code, {
+      onCopied: () => {
+        setLinkCopied(true);
+        setTimeout(() => setLinkCopied(false), 3000);
+      },
+    });
   }
 
   if (!round) {
@@ -234,7 +243,7 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
         </TouchableOpacity>
         {isRoundOver && players.length < 6 && (
           <TouchableOpacity onPress={handleShare} activeOpacity={0.7}>
-            <Text style={styles.inviteText}>📤 Invite players</Text>
+            <Text style={styles.inviteText}>{linkCopied ? "✓ Link copied!" : "📤 Invite players"}</Text>
           </TouchableOpacity>
         )}
       </View>

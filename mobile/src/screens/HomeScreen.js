@@ -44,6 +44,19 @@ export default function HomeScreen({ onEnterRoom }) {
     });
   }, []);
 
+  // An invite link (see inviteLink.js) opens the web app with ?code=XXXXX —
+  // pre-fill the join field so the recipient just needs to enter their name.
+  useEffect(() => {
+    if (Platform.OS !== "web" || typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const codeParam = params.get("code");
+    if (codeParam) {
+      setJoinCode(codeParam.toUpperCase());
+      // Clean the URL so refreshing or re-sharing it doesn't repeat/stick.
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
   function persist(next) {
     AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next)).catch(() => {});
   }
