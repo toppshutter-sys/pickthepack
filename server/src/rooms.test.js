@@ -3,6 +3,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { RoomManager, FLIP_COOLDOWN_MS } = require("./rooms");
+const { findMandatoryKnock } = require("./gameEngine");
 
 function seatRoom(names) {
   const rooms = new RoomManager();
@@ -350,12 +351,22 @@ test("rejoinRoom: works mid-round too — a reconnect shouldn't be blocked the w
   assert.equal(after.players.find((p) => p.name === "Bo").connected, true);
 });
 
-/** Re-deals until the round lands in the Matching Phase (round-active). */
+/**
+ * Re-deals until the round lands in the Matching Phase (round-active) AND
+ * the flip-turn player has no mandatory match sitting in their hand — the
+ * cooldown tests below need a flip attempt to actually reach tapDeck's
+ * cooldown check rather than being turned away first by the engine's own
+ * "you must knock instead" rule, which a randomly dealt hand can otherwise
+ * trigger and make these tests flaky.
+ */
 function forceRoundActive(rooms, room) {
   let r;
   do {
     r = rooms.startRound(room.code);
-  } while (r.status !== "round-active");
+  } while (
+    r.status !== "round-active" ||
+    findMandatoryKnock(r.round.hands[r.round.turnIndex], r.round.faceUpCard.rank)
+  );
   return r;
 }
 
@@ -383,6 +394,15 @@ test("tapDeck: a second flip right after a successful one is rejected again", ()
   const r = forceRoundActive(rooms, room);
   room.lastFlipAt = Date.now() - (FLIP_COOLDOWN_MS + 100);
   const after = rooms.tapDeck(room.code, `s${r.round.turnIndex}`);
+  if (after.status !== "round-active") {
+    // Rare but legitimate: the flip's own auto-match chain (see the flip
+    // priority rule in gameEngine.js) cleared the flipper's whole hand and
+    // won the round outright on this single flip — there's no round left
+    // to flip in at all, an even stronger "can't flip again" than the
+    // cooldown, so the invariant this test cares about still holds.
+    assert.equal(after.status, "round-over");
+    return;
+  }
   // Whoever's turn it is now (advanced by the flip) tries again immediately.
   const nextTurnSocketId = `s${after.round.turnIndex}`;
   assert.throws(() => rooms.tapDeck(room.code, nextTurnSocketId), /moment to look/);
@@ -393,12 +413,16 @@ test("tapDeck: knocking (matching) is not subject to the flip cooldown", () => {
   const r = forceRoundActive(rooms, room);
   // Cooldown is fresh (round just started) — a knock attempt should still
   // be evaluated by the engine rather than being blocked outright. Pick a
-  // card that's very unlikely to match so we just confirm we get the
-  // engine's own "no match" style error, not the cooldown error.
+  // card whose rank is guaranteed not to match the target (a random card
+  // from the hand could legitimately match and knock successfully, which
+  // would make this assertion flaky) so we can confirm we get the engine's
+  // own "no match" style error, not the cooldown error.
   const nonTurnPlayerIdx = (r.round.turnIndex + 1) % 3;
-  const someCardId = r.round.hands[nonTurnPlayerIdx][0].id;
+  const targetRank = r.round.faceUpCard.rank;
+  const nonMatchingCard = r.round.hands[nonTurnPlayerIdx].find((c) => c.rank !== targetRank);
+  assert.ok(nonMatchingCard, "expected at least one non-matching card in the test hand");
   assert.throws(
-    () => rooms.tapCard(room.code, `s${nonTurnPlayerIdx}`, someCardId, r.round.faceUpCard.id),
+    () => rooms.tapCard(room.code, `s${nonTurnPlayerIdx}`, nonMatchingCard.id, r.round.faceUpCard.id),
     (err) => !/moment to look/.test(err.message)
   );
 });

@@ -227,6 +227,9 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
           <Text style={styles.dealerCardTitle}>
             🃏 {players[roomState.dealerIndex].name} deals the {round.faceUpCard.rank} of {round.faceUpCard.suit}
           </Text>
+          <View style={styles.dealerCardImageWrap}>
+            <Card card={round.faceUpCard} />
+          </View>
           <Text style={styles.dealerCardSubtitle}>
             Dealer wins ${round.wonAmount} instantly! Recast your bet to continue with the same hand.
           </Text>
@@ -516,6 +519,7 @@ const styles = StyleSheet.create({
     shadowColor: "#c9a24b", shadowOpacity: 0.4, shadowOffset: { width: 0, height: 8 }, shadowRadius: 20, elevation: 6,
   },
   dealerCardTitle: { color: "#2a2107", fontWeight: "800", fontSize: 16, textAlign: "center" },
+  dealerCardImageWrap: { marginTop: 10 },
   dealerCardSubtitle: { color: "#4a3a10", fontSize: 13, marginTop: 6, textAlign: "center" },
   playerList: { width: "100%", marginBottom: 20 },
   recastRow: {
