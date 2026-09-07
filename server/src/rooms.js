@@ -74,6 +74,9 @@ class RoomManager {
     }
     if (room.players.length >= 6) throw new Error("Room is full (max 6 players)");
     if (room.players.some((p) => p.id === socketId)) throw new Error("Already in this room");
+    if (room.players.some((p) => p.name.toLowerCase() === playerName.toLowerCase())) {
+      throw new Error(`"${playerName}" is already at this table — enter a different name`);
+    }
     room.players.push({ id: socketId, name: playerName, connected: true, totalContributed: 0, totalWon: 0 });
     return room;
   }
@@ -112,6 +115,29 @@ class RoomManager {
     }
 
     this.addLog(room, `${leavingName} left the table.`);
+    return room;
+  }
+
+  /**
+   * Reclaims an existing seat after the socket reconnects with a new id.
+   * Socket.IO doesn't preserve the old socket id across a disconnect/
+   * reconnect cycle (a brief wifi drop, a tab/app getting backgrounded and
+   * resumed, etc.) — without this, the reconnected client is a "zombie":
+   * still technically connected to the server, but never re-associated
+   * with the room, so it silently stops receiving that room's broadcasts
+   * and appears frozen (greyed out, stuck) on whatever screen it was last
+   * showing, even as everyone else's game moves on normally. Matched by
+   * name (case-insensitive) since there's no persistent session/account
+   * system — safe because joinRoom enforces unique names per room for the
+   * room's entire lifetime, connected or not.
+   */
+  rejoinRoom({ code, socketId, playerName }) {
+    const room = this.rooms.get(code);
+    if (!room) throw new Error("Room not found");
+    const player = room.players.find((p) => p.name.toLowerCase() === (playerName || "").toLowerCase());
+    if (!player) throw new Error("No matching seat found in this room");
+    player.id = socketId;
+    player.connected = true;
     return room;
   }
 

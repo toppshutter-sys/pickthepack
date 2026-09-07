@@ -246,3 +246,79 @@ test("joinRoom: capped at 6 players even between hands", () => {
     /Room is full/
   );
 });
+
+test("joinRoom: rejected when the name is already taken at this table", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo"]);
+  assert.throws(
+    () => rooms.joinRoom({ code: room.code, socketId: "s2", playerName: "Ann" }),
+    /already at this table/
+  );
+});
+
+test("joinRoom: name uniqueness is case-insensitive", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo"]);
+  assert.throws(
+    () => rooms.joinRoom({ code: room.code, socketId: "s2", playerName: "ann" }),
+    /already at this table/
+  );
+  assert.throws(
+    () => rooms.joinRoom({ code: room.code, socketId: "s2", playerName: "ANN" }),
+    /already at this table/
+  );
+});
+
+test("joinRoom: a genuinely different name is unaffected by the uniqueness check", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo"]);
+  const after = rooms.joinRoom({ code: room.code, socketId: "s2", playerName: "Cy" });
+  assert.deepEqual(after.players.map((p) => p.name), ["Ann", "Bo", "Cy"]);
+});
+
+test("rejoinRoom: reclaims a disconnected player's seat under a new socket id", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo"]);
+  rooms.markDisconnected("s0");
+  const after = rooms.rejoinRoom({ code: room.code, socketId: "s0-new", playerName: "Ann" });
+  const ann = after.players.find((p) => p.name === "Ann");
+  assert.equal(ann.id, "s0-new");
+  assert.equal(ann.connected, true);
+  assert.equal(after.players.length, 2, "reclaims the existing seat, doesn't add a new one");
+});
+
+test("rejoinRoom: matching is case-insensitive", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo"]);
+  rooms.markDisconnected("s0");
+  const after = rooms.rejoinRoom({ code: room.code, socketId: "s0-new", playerName: "ann" });
+  assert.equal(after.players.find((p) => p.name === "Ann").connected, true);
+});
+
+test("rejoinRoom: a socket for a still-connected player can also refresh its id (idempotent)", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo"]);
+  const after = rooms.rejoinRoom({ code: room.code, socketId: "s0-refreshed", playerName: "Ann" });
+  assert.equal(after.players.find((p) => p.name === "Ann").id, "s0-refreshed");
+});
+
+test("rejoinRoom: throws when no seat matches that name", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo"]);
+  assert.throws(
+    () => rooms.rejoinRoom({ code: room.code, socketId: "s9", playerName: "Zed" }),
+    /No matching seat/
+  );
+});
+
+test("rejoinRoom: throws for an unknown room code", () => {
+  const rooms = new RoomManager();
+  assert.throws(
+    () => rooms.rejoinRoom({ code: "NOPE1", socketId: "s0", playerName: "Ann" }),
+    /Room not found/
+  );
+});
+
+test("rejoinRoom: works mid-round too — a reconnect shouldn't be blocked the way a fresh join is", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  let r;
+  do {
+    r = rooms.startRound(room.code);
+  } while (r.status !== "round-active");
+  rooms.markDisconnected("s1");
+  const after = rooms.rejoinRoom({ code: room.code, socketId: "s1-new", playerName: "Bo" });
+  assert.equal(after.players.find((p) => p.name === "Bo").connected, true);
+});

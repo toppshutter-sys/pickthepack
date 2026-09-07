@@ -5,6 +5,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import HomeScreen from "./src/screens/HomeScreen";
 import LobbyScreen from "./src/screens/LobbyScreen";
 import GameScreen from "./src/screens/GameScreen";
+import { emitWithAck } from "./src/socket";
 
 export default function App() {
   const [session, setSession] = useState(null); // { socket, code, playerName, serverUrl }
@@ -12,7 +13,7 @@ export default function App() {
 
   useEffect(() => {
     if (!session) return;
-    const { socket } = session;
+    const { socket, code, playerName } = session;
 
     function onRoomState(state) {
       setRoomState(state);
@@ -25,15 +26,32 @@ export default function App() {
     function onDisconnect() {
       console.warn("Disconnected from server.");
     }
+    // The socket is always already connected by the time this effect
+    // attaches (HomeScreen awaited that itself before handing off a
+    // session), so any "connect" event THIS listener observes is by
+    // definition a reconnect — dropped wifi, a backgrounded tab/app
+    // resuming, etc. — not the initial connection, which already happened
+    // before this listener existed. Socket.IO hands a reconnect a
+    // brand-new socket id, so without re-announcing ourselves the server
+    // has no idea this connection belongs to our seat, and we'd silently
+    // stop receiving this room's updates, frozen on whatever screen we
+    // were last on.
+    function onConnect() {
+      emitWithAck(socket, "rejoin-room", { code, playerName }).catch((e) => {
+        console.warn("Could not reclaim seat after reconnect:", e.message);
+      });
+    }
 
     socket.on("room-state", onRoomState);
     socket.on("game-error", onGameError);
     socket.on("disconnect", onDisconnect);
+    socket.on("connect", onConnect);
 
     return () => {
       socket.off("room-state", onRoomState);
       socket.off("game-error", onGameError);
       socket.off("disconnect", onDisconnect);
+      socket.off("connect", onConnect);
     };
   }, [session]);
 

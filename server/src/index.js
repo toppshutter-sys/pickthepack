@@ -75,6 +75,20 @@ io.on("connection", (socket) => {
     })
   );
 
+  // Fired by the client when its socket reconnects mid-session (see
+  // App.js) — reclaims the existing seat by name rather than joining
+  // fresh, so a dropped connection doesn't strand the player on a frozen
+  // screen or create a duplicate entry.
+  socket.on(
+    "rejoin-room",
+    safeHandler(socket, ({ code, playerName }, ack) => {
+      const room = rooms.rejoinRoom({ code: (code || "").toUpperCase(), socketId: socket.id, playerName });
+      socket.join(room.code);
+      ack && ack({ ok: true });
+      rooms.broadcastState(room, io);
+    })
+  );
+
   socket.on(
     "leave-room",
     safeHandler(socket, ({ code }, ack) => {
