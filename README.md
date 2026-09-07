@@ -1,5 +1,7 @@
 # Pick the Pack
 
+Copyright © 2026 Rosario Stanley. All rights reserved.
+
 A real-time multiplayer card game. Players join a table, pick **Pack 5** ($5) or **Pack 10** ($10),
 and play a hand of "Pick the Pack": 3 cards each, dealt and checked instantly for a Royal Sequence
 (K-Q-J), Ace-2-3, a Sequence, or Same-Suit (flush) — any of those wins the pot right away. If nobody
