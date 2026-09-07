@@ -23,6 +23,48 @@ const CATEGORY_LABEL = {
   dealerCard: "Dealer's Card (J or 6)",
 };
 
+// Running net position for one table, for the length of one game night —
+// how much a player has won minus how much they've anted in, computed
+// straight from data the server already tracks and broadcasts. No account
+// or profile is involved; this resets whenever the table itself resets.
+function netFor(p) {
+  return (p && p.totalWon ? p.totalWon : 0) - (p && p.totalContributed ? p.totalContributed : 0);
+}
+
+function formatNet(n) {
+  if (n > 0) return `+$${n}`;
+  if (n < 0) return `-$${Math.abs(n)}`;
+  return "$0";
+}
+
+function netPillBorderColor(n) {
+  if (n > 0) return "rgba(127,214,166,0.45)";
+  if (n < 0) return "rgba(255,180,180,0.4)";
+  return "rgba(147,169,150,0.35)";
+}
+
+function netTextStyle(n) {
+  if (n > 0) return styles.netTextPositive;
+  if (n < 0) return styles.netTextNegative;
+  return styles.netTextZero;
+}
+
+/** The small pill shown next to a player's name — their running net for this table. */
+function NetPill({ player, size = "small" }) {
+  const n = netFor(player);
+  return (
+    <GlassPanel
+      style={[styles.netPill, size === "large" && styles.netPillLarge]}
+      radius={999}
+      borderColor={netPillBorderColor(n)}
+    >
+      <Text style={[styles.netPillText, size === "large" && styles.netPillTextLarge, netTextStyle(n)]}>
+        Net {formatNet(n)}
+      </Text>
+    </GlassPanel>
+  );
+}
+
 export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -193,10 +235,13 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
         <View style={styles.playerList}>
           {players.map((p, i) => (
             <GlassPanel key={i} style={styles.recastRow}>
-              <Text style={styles.recastName}>
-                {p.name}
-                {i === you ? " (you)" : ""}
-              </Text>
+              <View style={styles.recastNameCol}>
+                <Text style={styles.recastName}>
+                  {p.name}
+                  {i === you ? " (you)" : ""}
+                </Text>
+                <NetPill player={p} />
+              </View>
               <Text style={round.recastReady[i] ? styles.recastDone : styles.recastPending}>
                 {round.recastReady[i] ? "✓ recast" : p.connected ? "waiting…" : "disconnected"}
               </Text>
@@ -291,6 +336,7 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
                 {round.pendingPlacement === i ? " (placing…)" : ""}
                 {winnerSet.has(i) ? " 🏆" : ""}
               </Text>
+              <NetPill player={p} />
               <Hand cards={round.hands[i] || []} size="small" />
             </View>
           )
@@ -348,6 +394,7 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
           Your hand
           {winnerSet.has(you) ? " 🏆" : ""}
         </Text>
+        <NetPill player={players[you]} size="large" />
         {!isInstantWin && !isRoundOver ? (
           <Text style={styles.turnHint}>
             {isMyPendingPlacement
@@ -476,8 +523,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 12, marginBottom: 8,
   },
   recastName: { color: "#fff", fontSize: 16 },
+  recastNameCol: { alignItems: "flex-start" },
   recastDone: { color: "#7fd6a6", fontSize: 13, fontWeight: "700" },
   recastPending: { color: "#93a99c", fontSize: 13 },
+  netPill: { paddingHorizontal: 10, paddingVertical: 3, marginTop: 3, marginBottom: 6 },
+  netPillLarge: { paddingHorizontal: 14, paddingVertical: 5, marginBottom: 10 },
+  netPillText: { fontSize: 11, fontWeight: "700" },
+  netPillTextLarge: { fontSize: 13.5 },
+  netTextPositive: { color: "#7fd6a6" },
+  netTextNegative: { color: "#ffb4b4" },
+  netTextZero: { color: "#93a99c" },
   opponents: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", marginBottom: 20 },
   opponentBlock: { alignItems: "center", marginHorizontal: 10, marginBottom: 10 },
   opponentName: { color: "#e6efe9", marginBottom: 4, fontSize: 13 },
