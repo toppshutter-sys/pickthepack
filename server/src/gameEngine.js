@@ -226,9 +226,10 @@ function drawWithReshuffle(deck, tablePile, count, rng = Math.random) {
  *
  * Matching is a FREE-FOR-ALL, not a turn: any player can tap the target
  * card at any moment they think they have a match — first tap in wins it,
- * whoever's turn it "is" otherwise. `turnIndex` only ever controls one
- * thing: whose job it is to flip the next card from the deck if nobody
- * has matched. So:
+ * whoever's turn it "is" otherwise. `turnIndex` controls whose job it is to
+ * flip the next card from the deck if nobody has matched — every knock OR
+ * flip advances it by one, regardless of who performed it, same as passing
+ * a discard pile in a normal turn-based card game would. So:
  *   - Tap a card in your own hand -> attemptKnock(state, playerIdx, cardId):
  *     you're asserting that card matches the target rank, right now, no
  *     matter whose flip-turn it is. Validated server-side; a wrong guess is
@@ -242,37 +243,32 @@ function drawWithReshuffle(deck, tablePile, count, rng = Math.random) {
  *     (placeTarget) to place face-up as the new target everyone else can
  *     try to match; if only 1 card would be left to choose from, you keep
  *     it instead (placing your only card wouldn't be a real "match win")
- *     and the deck supplies the next target automatically.
+ *     and the deck supplies the next target automatically. Either way,
+ *     turnIndex advances by one from wherever it currently was — a knock
+ *     is still "an action on the target," so the flip obligation rotates
+ *     the same way a flip itself would, rather than staying put.
  *   - Tap the deck -> flipFromDeck(state, playerIdx): only the player whose
  *     turn it is to flip may do this, and only if THEY personally have no
  *     mandatory match sitting in their own hand (the mandatory-knock rule
- *     still applies to whoever is about to flip).
+ *     still applies to whoever is about to flip). PRIORITY: if the card
+ *     they reveal matches something in their OWN hand, it's immediately
+ *     theirs — auto-knocked on their behalf rather than opening to the
+ *     free-for-all (and that can chain again if the resulting refill also
+ *     matches them). Flipping, with or without a chained auto-knock,
+ *     still only ever advances turnIndex by exactly one, to the player
+ *     after the flipper.
  */
-function attemptKnock(state, playerIdx, cardId, expectedTargetId, rng = Math.random) {
-  if (state.winnerIndex !== null && state.winnerIndex !== undefined) {
-    throw new Error("This round is already over");
-  }
-  if (state.pendingPlacement !== null && state.pendingPlacement !== undefined) {
-    throw new Error("Waiting for a new target card to be placed — try again in a moment");
-  }
-  if (expectedTargetId && state.faceUpCard && state.faceUpCard.id !== expectedTargetId) {
-    throw new Error("Someone already matched that card — there's a new target now");
-  }
-
+/**
+ * Core knock resolution, shared by attemptKnock and the auto-match chain
+ * below — assumes `matchCard` has ALREADY been validated as a legal match
+ * (attemptKnock validates before calling this; the auto-match chain only
+ * ever calls it with a card findMandatoryKnock itself confirmed). Never
+ * touches turnIndex — callers decide when and how far to advance it, since
+ * a knock can happen standalone (advance once) or chained after a flip
+ * (the whole chain counts as a single advance, from the flipper).
+ */
+function _resolveKnock(state, playerIdx, matchCard, rng) {
   const hand = state.hands[playerIdx];
-  const faceUpRank = state.faceUpCard.rank;
-
-  const card = hand.find((c) => c.id === cardId);
-  if (!card) {
-    throw new Error("That card isn't in your hand");
-  }
-  const { active } = classifyHandForMatching(hand);
-  const isValidKnock = card.rank === faceUpRank && active.some((c) => c.id === cardId);
-  if (!isValidKnock) {
-    throw new Error(`That card doesn't match the target (${faceUpRank}) — tap the deck instead if you have no match`);
-  }
-
-  const matchCard = card;
   const handAfterRemoval = hand.filter((c) => c.id !== matchCard.id);
   const newTablePile = [...state.tablePile, matchCard, state.faceUpCard];
   const { active: remainingActive } = classifyHandForMatching(handAfterRemoval);
@@ -298,8 +294,7 @@ function attemptKnock(state, playerIdx, cardId, expectedTargetId, rng = Math.ran
     // Only one card would be left to "choose" for placement — forcing that
     // choice would empty your hand by DISCARDING it, not by matching it
     // away, which shouldn't count as winning. Keep it, and draw the next
-    // target from the deck instead (same source a flip would use). This
-    // doesn't touch whose flip-turn it is.
+    // target from the deck instead (same source a flip would use).
     const { drawn, deck, tablePile } = drawWithReshuffle(state.deck, newTablePile, 1, rng);
     return {
       ...state,
@@ -326,6 +321,65 @@ function attemptKnock(state, playerIdx, cardId, expectedTargetId, rng = Math.ran
     winnerIndex: null,
     action: { type: "knock-awaiting-placement", playerIdx, card: matchCard },
   };
+}
+
+/**
+ * Priority rule: whenever a new card is revealed from the deck — a manual
+ * flip, or a knock's own 1-card-left refill — the player who caused that
+ * reveal gets it immediately if it's theirs to take, rather than it opening
+ * up to the free-for-all. Repeatedly applies _resolveKnock for `playerIdx`
+ * as long as their hand still has a mandatory match for whatever card is
+ * currently face-up (their own refill can chain into another match, and so
+ * on), stopping as soon as there's no card to check against (a
+ * pendingPlacement), the round ends (a win), or they simply don't match.
+ */
+function _resolveAutoMatchChain(state, playerIdx, rng) {
+  let current = state;
+  while ((current.winnerIndex === null || current.winnerIndex === undefined) && current.faceUpCard) {
+    const match = findMandatoryKnock(current.hands[playerIdx], current.faceUpCard.rank);
+    if (!match) break;
+    current = _resolveKnock(current, playerIdx, match, rng);
+  }
+  return current;
+}
+
+function attemptKnock(state, playerIdx, cardId, expectedTargetId, rng = Math.random) {
+  if (state.winnerIndex !== null && state.winnerIndex !== undefined) {
+    throw new Error("This round is already over");
+  }
+  if (state.pendingPlacement !== null && state.pendingPlacement !== undefined) {
+    throw new Error("Waiting for a new target card to be placed — try again in a moment");
+  }
+  if (expectedTargetId && state.faceUpCard && state.faceUpCard.id !== expectedTargetId) {
+    throw new Error("Someone already matched that card — there's a new target now");
+  }
+
+  const hand = state.hands[playerIdx];
+  const faceUpRank = state.faceUpCard.rank;
+
+  const card = hand.find((c) => c.id === cardId);
+  if (!card) {
+    throw new Error("That card isn't in your hand");
+  }
+  const { active } = classifyHandForMatching(hand);
+  const isValidKnock = card.rank === faceUpRank && active.some((c) => c.id === cardId);
+  if (!isValidKnock) {
+    throw new Error(`That card doesn't match the target (${faceUpRank}) — tap the deck instead if you have no match`);
+  }
+
+  const numPlayers = state.hands.length;
+  // A knock's own 1-card-left refill can chain into more auto-matches for
+  // the same player (see _resolveAutoMatchChain) before this settles.
+  let result = _resolveAutoMatchChain(_resolveKnock(state, playerIdx, card, rng), playerIdx, rng);
+
+  // A knock still advances the flip-turn by one, from wherever it
+  // currently is — independent of who actually knocked. A knock is still
+  // "an action on the target," same as a flip, so the obligation to flip
+  // next rotates the same way; it doesn't hand the turn to the knocker.
+  if (result.winnerIndex === null || result.winnerIndex === undefined) {
+    result = { ...result, turnIndex: (state.turnIndex + 1) % numPlayers };
+  }
+  return result;
 }
 
 /**
@@ -389,15 +443,23 @@ function flipFromDeck(state, playerIdx, rng = Math.random) {
     rng
   );
 
-  return {
+  const flipped = {
     ...state,
     deck,
     tablePile,
     faceUpCard: drawn[0],
-    turnIndex: (playerIdx + 1) % numPlayers,
     winnerIndex: null,
     action: { type: "flip", playerIdx, card: drawn[0] },
   };
+
+  // Priority: if the flipper's own hand matches the card they just
+  // revealed, it's immediately theirs — auto-knocked (and able to chain
+  // further, per _resolveAutoMatchChain) rather than opening to the
+  // free-for-all. Either way, flipping (with or without a chained
+  // auto-knock) advances the flip-turn exactly once, to the player after
+  // the flipper.
+  const resolved = _resolveAutoMatchChain(flipped, playerIdx, rng);
+  return { ...resolved, turnIndex: (playerIdx + 1) % numPlayers };
 }
 
 /**
@@ -406,7 +468,9 @@ function flipFromDeck(state, playerIdx, rng = Math.random) {
  * card — used by bots (and by tests that don't care about the tap-driven
  * UI/free-for-all matching) rather than by real human players, who instead
  * call attemptKnock/flipFromDeck/placeTarget directly, and aren't limited
- * to acting only on their own flip-turn.
+ * to acting only on their own flip-turn. A flip can now ALSO land on a
+ * pendingPlacement (the flip-priority auto-knock chain can leave 2+ cards,
+ * same as a direct knock can), so both branches resolve it the same way.
  */
 function playMatchingTurn(state, rng = Math.random) {
   if (state.winnerIndex !== null && state.winnerIndex !== undefined) {
@@ -416,13 +480,11 @@ function playMatchingTurn(state, rng = Math.random) {
   const hand = state.hands[playerIdx];
   const faceUpRank = state.faceUpCard.rank;
   const matchCard = findMandatoryKnock(hand, faceUpRank);
-  if (!matchCard) {
-    return flipFromDeck(state, playerIdx, rng);
-  }
-  let next = attemptKnock(state, playerIdx, matchCard.id, null, rng);
-  if (next.pendingPlacement === playerIdx) {
-    const cardToPlace = next.hands[playerIdx][0];
-    next = placeTarget(next, playerIdx, cardToPlace.id);
+  let next = matchCard ? attemptKnock(state, playerIdx, matchCard.id, null, rng) : flipFromDeck(state, playerIdx, rng);
+  if (next.pendingPlacement !== null && next.pendingPlacement !== undefined) {
+    const placerIdx = next.pendingPlacement;
+    const cardToPlace = next.hands[placerIdx][0];
+    next = placeTarget(next, placerIdx, cardToPlace.id);
   }
   return next;
 }

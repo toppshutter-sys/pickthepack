@@ -204,7 +204,7 @@ test("attemptKnock: matching is a free-for-all — a player who is NOT the flip-
   const next = engine.attemptKnock(state, 1, "6-hearts");
   assert.equal(next.hands[1].length, 2);
   assert.equal(next.pendingPlacement, 1);
-  assert.equal(next.turnIndex, 0, "a knock is an interrupt, it doesn't hand the flip-turn to anyone");
+  assert.equal(next.turnIndex, 1, "a knock still advances the flip-turn by one, from wherever it currently is, regardless of who knocked");
 });
 
 test("attemptKnock: a stale target (someone else already matched it) is rejected with a distinct message", () => {
@@ -259,6 +259,108 @@ test("attemptKnock: only one card would be left to place -> keeps it and refills
   assert.equal(next.faceUpCard.id, "2-diamonds");
   assert.equal(next.pendingPlacement, null);
   assert.equal(next.deck.length, 1);
+});
+
+test("attemptKnock: advances turnIndex by one from wherever it currently is, regardless of who knocked", () => {
+  const state = {
+    hands: [
+      [c("K", "hearts")], // player 0 — flip-turn holder, no match
+      [c("6", "hearts"), c("9", "clubs"), c("5", "spades")], // player 1 — knocks (2 remain -> pendingPlacement)
+      [c("Q", "diamonds")], // player 2
+    ],
+    deck: [c("2", "clubs")],
+    tablePile: [],
+    faceUpCard: c("6", "diamonds"),
+    turnIndex: 0, // it's player 0's flip-turn — irrelevant to who's allowed to knock
+    winnerIndex: null,
+    pendingPlacement: null,
+  };
+  const next = engine.attemptKnock(state, 1, "6-hearts");
+  assert.equal(next.pendingPlacement, 1);
+  assert.equal(next.turnIndex, 1, "advances from turnIndex 0 to 1 — NOT to 2 (one after the knocker)");
+});
+
+test("attemptKnock: turnIndex wraps around past the last player", () => {
+  const state = {
+    hands: [
+      [c("Q", "diamonds")],
+      [c("K", "hearts")],
+      [c("6", "hearts"), c("9", "clubs")], // player 2 knocks, leaves exactly 1 -> auto-refill, no chain match
+    ],
+    deck: [c("2", "clubs")],
+    tablePile: [],
+    faceUpCard: c("6", "diamonds"),
+    turnIndex: 2,
+    winnerIndex: null,
+    pendingPlacement: null,
+  };
+  const next = engine.attemptKnock(state, 2, "6-hearts");
+  assert.equal(next.turnIndex, 0, "wraps from 2 back to 0 for 3 players");
+});
+
+test("flipFromDeck: priority — if the flipper's own hand matches the card they just revealed, it's auto-knocked for them", () => {
+  const state = {
+    hands: [
+      // Exactly one 9 — two would form a "natural pair" and be excluded
+      // from matchable/active cards entirely, which isn't what this test
+      // is after.
+      [c("9", "clubs"), c("K", "spades"), c("Q", "hearts")], // player 0 (flips) — holds a 9, matches the deck's next card
+      [c("Q", "diamonds"), c("J", "clubs"), c("2", "hearts")],
+    ],
+    deck: [c("9", "diamonds"), c("7", "spades")], // next card off the deck is a 9 — matches player 0's hand
+    tablePile: [],
+    faceUpCard: c("6", "diamonds"), // current target — neither player has a 6, so flipping is legal
+    turnIndex: 0,
+    winnerIndex: null,
+    pendingPlacement: null,
+  };
+  const next = engine.flipFromDeck(state, 0);
+  // Auto-knocked: the 9 of diamonds never sits as an open target for anyone
+  // else to grab — it's immediately matched against player 0's own 9.
+  assert.equal(next.action.type, "knock-awaiting-placement", "resolved as a knock, not left as a plain flip");
+  assert.equal(next.hands[0].length, 2, "player 0's 9 was consumed by the auto-knock, 2 cards remain");
+  assert.equal(next.pendingPlacement, 0);
+  assert.equal(next.turnIndex, 1, "still just ONE advance total, to the player after the flipper");
+});
+
+test("flipFromDeck: no auto-match for the flipper — behaves like a plain flip", () => {
+  const state = {
+    hands: [
+      [c("Q", "diamonds"), c("J", "clubs"), c("2", "hearts")], // player 0 flips, no match for what's drawn
+      [c("K", "spades")],
+    ],
+    deck: [c("9", "diamonds"), c("7", "spades")],
+    tablePile: [],
+    faceUpCard: c("6", "diamonds"),
+    turnIndex: 0,
+    winnerIndex: null,
+    pendingPlacement: null,
+  };
+  const next = engine.flipFromDeck(state, 0);
+  assert.equal(next.action.type, "flip");
+  assert.equal(next.faceUpCard.id, "9-diamonds");
+  assert.equal(next.turnIndex, 1);
+});
+
+test("flipFromDeck: priority chains — an auto-knock's own 1-card-left refill can auto-match the SAME flipper again", () => {
+  const state = {
+    hands: [
+      [c("9", "clubs"), c("K", "spades")], // player 0: knocking the 9 leaves exactly 1 card (K) -> auto-refill
+      [c("Q", "diamonds")],
+    ],
+    // First card off the deck (9-diamonds) matches player 0's 9. That knock
+    // leaves exactly 1 card (K-spades), so the deck auto-refills — and the
+    // NEXT card up (K-hearts) matches that lone K, chaining into a win.
+    deck: [c("9", "diamonds"), c("K", "hearts")],
+    tablePile: [],
+    faceUpCard: c("6", "diamonds"),
+    turnIndex: 0,
+    winnerIndex: null,
+    pendingPlacement: null,
+  };
+  const next = engine.flipFromDeck(state, 0);
+  assert.equal(next.winnerIndex, 0, "the chain runs all the way to an outright win for the flipper");
+  assert.equal(next.hands[0].length, 0);
 });
 
 test("placeTarget: the knocker places one of their remaining cards as the new target", () => {
