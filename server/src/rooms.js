@@ -13,6 +13,12 @@
 
 const engine = require("./gameEngine");
 
+// Minimum time between deck flips, enforced globally per room (not just per
+// player) — so cards can't be rapid-fired through, and everyone gets a
+// moment to actually see one before the next is allowed. Knocking (racing
+// to match) is deliberately NOT subject to this — only flipping.
+const FLIP_COOLDOWN_MS = 1000;
+
 function makeRoomCode() {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I ambiguity
   let code = "";
@@ -53,6 +59,7 @@ class RoomManager {
       round: null, // engine state (phase: 'instant-win' | 'matching')
       log: [],
       lastKnock: null, // { playerIdx, card } — the most recent knock this round, for the client's knock indicator
+      lastFlipAt: 0, // timestamp of the most recent successful deck flip — see FLIP_COOLDOWN_MS
     };
     this.rooms.set(code, room);
     return room;
@@ -297,6 +304,10 @@ class RoomManager {
 
     // matching
     room.status = "round-active";
+    // Starts the flip cooldown from the moment the Matching Phase begins,
+    // not just from the first flip — so nobody can flip again the instant
+    // the round starts, before everyone's even seen their own hand.
+    room.lastFlipAt = Date.now();
     this.addLog(
       room,
       `Deal complete — no instant win. Target card: ${result.faceUpCard.rank} of ${result.faceUpCard.suit}. Matching Phase begins.`
@@ -369,10 +380,27 @@ class RoomManager {
     return this._applyTurnResult(room, player, after);
   }
 
-  /** Player taps the deck — only the player whose flip-turn it currently is may do this. */
+  /**
+   * Player taps the deck — only the player whose flip-turn it currently is
+   * may do this, and only once FLIP_COOLDOWN_MS has passed since the last
+   * successful flip (enforced globally per room, not per player) — so
+   * cards can't be rapid-fired through without anyone else getting a
+   * chance to actually see one and think. Turn ownership is checked before
+   * the cooldown so an out-of-turn tap always gets the turn-order message
+   * rather than being misreported as "too soon" (which would wrongly imply
+   * they'd be allowed to flip once the cooldown passes).
+   */
   tapDeck(code, socketId) {
     const { room, playerIdx, player } = this._validateActivePlayer(code, socketId);
+    if (playerIdx !== room.round.turnIndex) {
+      throw new Error("It's not your turn to flip yet — you can still tap a matching card at any time, though");
+    }
+    const elapsed = Date.now() - room.lastFlipAt;
+    if (elapsed < FLIP_COOLDOWN_MS) {
+      throw new Error("Give everyone a moment to look — try again in a second.");
+    }
     const after = engine.flipFromDeck(room.round, playerIdx);
+    room.lastFlipAt = Date.now();
     return this._applyTurnResult(room, player, after);
   }
 
@@ -432,6 +460,10 @@ class RoomManager {
               : null,
             wonAmount: room.round.wonAmount ?? null,
             recastReady: room.recastReady ? room.players.map((p) => room.recastReady.has(p.id)) : null,
+            // Client-side timestamp (not a duration) so a clock-drift- and
+            // latency-tolerant countdown can be shown — the server remains
+            // the actual authority via tapDeck's own cooldown check.
+            flipAvailableAt: room.lastFlipAt + FLIP_COOLDOWN_MS,
           }
         : null,
       log: room.log.slice(-20),
@@ -446,4 +478,4 @@ class RoomManager {
   }
 }
 
-module.exports = { RoomManager, makeRoomCode };
+module.exports = { RoomManager, makeRoomCode, FLIP_COOLDOWN_MS };

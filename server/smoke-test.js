@@ -79,7 +79,7 @@ function buildServer() {
     });
   });
 
-  return { server };
+  return { server, rooms };
 }
 
 function emitAck(socket, event, payload) {
@@ -124,7 +124,7 @@ function checkHandsRevealed(state) {
   }
 }
 
-async function playOneRound(alice, bob, code, packAmount) {
+async function playOneRound(alice, bob, code, packAmount, rooms) {
   const startP1 = new Promise((r) => alice.once("room-state", r));
   const startP2 = new Promise((r) => bob.once("room-state", r));
   await emitAck(alice, "start-round", { code });
@@ -210,6 +210,12 @@ async function playOneRound(alice, bob, code, packAmount) {
       }
     }
 
+    // This loop drives many flips back-to-back to exercise game logic as
+    // fast as possible — bypass the real 1s inter-flip cooldown (covered by
+    // its own dedicated tests in rooms.test.js) so the smoke test isn't
+    // dominated by real-time waits unrelated to what it's checking.
+    rooms.rooms.get(code).lastFlipAt = 0;
+
     const p1 = new Promise((r) => alice.once("room-state", r));
     const p2 = new Promise((r) => bob.once("room-state", r));
 
@@ -271,7 +277,7 @@ async function playOneRound(alice, bob, code, packAmount) {
 }
 
 async function main() {
-  const { server } = buildServer();
+  const { server, rooms } = buildServer();
   await new Promise((resolve) => server.listen(PORT, resolve));
   console.log(`smoke-test server up on :${PORT}`);
 
@@ -301,7 +307,7 @@ async function main() {
   const N = 25;
   for (let i = 0; i < N; i++) {
     console.log(`--- round ${i + 1}/${N} ---`);
-    const state = await playOneRound(alice, bob, code, 5);
+    const state = await playOneRound(alice, bob, code, 5, rooms);
     outcomes[state.round.phase]++;
   }
 

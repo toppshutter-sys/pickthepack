@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { RoomManager } = require("./rooms");
+const { RoomManager, FLIP_COOLDOWN_MS } = require("./rooms");
 
 function seatRoom(names) {
   const rooms = new RoomManager();
@@ -348,4 +348,73 @@ test("rejoinRoom: works mid-round too — a reconnect shouldn't be blocked the w
   rooms.markDisconnected("s1");
   const after = rooms.rejoinRoom({ code: room.code, socketId: "s1-new", playerName: "Bo" });
   assert.equal(after.players.find((p) => p.name === "Bo").connected, true);
+});
+
+/** Re-deals until the round lands in the Matching Phase (round-active). */
+function forceRoundActive(rooms, room) {
+  let r;
+  do {
+    r = rooms.startRound(room.code);
+  } while (r.status !== "round-active");
+  return r;
+}
+
+test("tapDeck: rejected when attempted before the flip cooldown has elapsed", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  const r = forceRoundActive(rooms, room);
+  // The cooldown baseline is set the instant the round starts, so the
+  // player whose turn it is can't flip immediately either.
+  const turnSocketId = `s${r.round.turnIndex}`;
+  assert.throws(() => rooms.tapDeck(room.code, turnSocketId), /moment to look/);
+});
+
+test("tapDeck: succeeds once the cooldown has elapsed", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  const r = forceRoundActive(rooms, room);
+  // Backdate lastFlipAt directly instead of sleeping in the test — same
+  // effect as real time having passed, without slowing the suite down.
+  room.lastFlipAt = Date.now() - (FLIP_COOLDOWN_MS + 100);
+  const turnSocketId = `s${r.round.turnIndex}`;
+  assert.doesNotThrow(() => rooms.tapDeck(room.code, turnSocketId));
+});
+
+test("tapDeck: a second flip right after a successful one is rejected again", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  const r = forceRoundActive(rooms, room);
+  room.lastFlipAt = Date.now() - (FLIP_COOLDOWN_MS + 100);
+  const after = rooms.tapDeck(room.code, `s${r.round.turnIndex}`);
+  // Whoever's turn it is now (advanced by the flip) tries again immediately.
+  const nextTurnSocketId = `s${after.round.turnIndex}`;
+  assert.throws(() => rooms.tapDeck(room.code, nextTurnSocketId), /moment to look/);
+});
+
+test("tapDeck: knocking (matching) is not subject to the flip cooldown", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  const r = forceRoundActive(rooms, room);
+  // Cooldown is fresh (round just started) — a knock attempt should still
+  // be evaluated by the engine rather than being blocked outright. Pick a
+  // card that's very unlikely to match so we just confirm we get the
+  // engine's own "no match" style error, not the cooldown error.
+  const nonTurnPlayerIdx = (r.round.turnIndex + 1) % 3;
+  const someCardId = r.round.hands[nonTurnPlayerIdx][0].id;
+  assert.throws(
+    () => rooms.tapCard(room.code, `s${nonTurnPlayerIdx}`, someCardId, r.round.faceUpCard.id),
+    (err) => !/moment to look/.test(err.message)
+  );
+});
+
+test("toPlayerState: exposes flipAvailableAt derived from lastFlipAt", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  forceRoundActive(rooms, room);
+  const state = rooms.toPlayerState(room, "s0");
+  assert.equal(state.round.flipAvailableAt, room.lastFlipAt + FLIP_COOLDOWN_MS);
+});
+
+test("startRound: resets the flip cooldown baseline when the Matching Phase begins", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  forceRoundActive(rooms, room);
+  room.lastFlipAt = 0; // simulate a stale baseline from a prior round
+  const before = Date.now();
+  forceRoundActive(rooms, room); // re-deals until Matching Phase begins again
+  assert.ok(room.lastFlipAt >= before);
 });

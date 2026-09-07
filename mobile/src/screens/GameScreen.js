@@ -34,8 +34,19 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
   // reads ambiguously — this makes the "I'm claiming this match" gesture
   // explicit, and lets you cancel by tapping the target again.
   const [selectingMatch, setSelectingMatch] = useState(false);
+  // Drives the deck's cooldown countdown — ticks while a round is live so
+  // every player's screen (not just the flipper's) shows the same "wait a
+  // second" state, derived from the server's synchronized flipAvailableAt.
+  const [now, setNow] = useState(Date.now());
 
   const { round, players, you, potAmount, packAmount } = roomState;
+
+  const roundIsLive = roomState.status === "round-active";
+  useEffect(() => {
+    if (!roundIsLive) return;
+    const id = setInterval(() => setNow(Date.now()), 150);
+    return () => clearInterval(id);
+  }, [roundIsLive]);
 
   // Reset the selection whenever the target card changes for any reason —
   // your own successful action, someone else racing you to it, or a flip —
@@ -217,6 +228,13 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
   // turnIndex only ever controls who's on the hook to flip the deck when
   // nobody has a match — matching itself is open to everyone, any time.
   const isMyFlipTurn = !isInstantWin && !isRoundOver && !placementPending && round.turnIndex === you;
+  // A brief global cooldown between flips (see FLIP_COOLDOWN_MS on the
+  // server) so cards can't be rapid-tapped through faster than anyone can
+  // actually see them — flipAvailableAt is a shared server timestamp, so
+  // this shows the same countdown on every player's screen, not just the
+  // flip-turn player's.
+  const flipCooldownRemainingMs = round.flipAvailableAt ? Math.max(0, round.flipAvailableAt - now) : 0;
+  const flipOnCooldown = flipCooldownRemainingMs > 0;
 
   // The table layout (deck, target card, everyone's hand) is ALWAYS shown,
   // regardless of how the round resolves — an instant win just adds a
@@ -286,9 +304,13 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
       <View style={styles.tableRow}>
         <View style={styles.pileBlock}>
           <Text style={styles.pileLabel}>Deck</Text>
-          <Card card={null} onPress={tapDeck} tappable={isMyFlipTurn} disabled={!isMyFlipTurn || busy} />
+          <Card card={null} onPress={tapDeck} tappable={isMyFlipTurn && !flipOnCooldown} disabled={!isMyFlipTurn || busy || flipOnCooldown} />
           <Text style={styles.pileCount}>{round.deckCount} left</Text>
-          {isMyFlipTurn ? <Text style={styles.tapHint}>tap if no match</Text> : null}
+          {isMyFlipTurn ? (
+            <Text style={styles.tapHint}>
+              {flipOnCooldown ? `wait ${Math.ceil(flipCooldownRemainingMs / 1000)}s…` : "tap if no match"}
+            </Text>
+          ) : null}
         </View>
 
         <View style={styles.pileBlock}>
@@ -348,7 +370,11 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
 
       {!isInstantWin && !isRoundOver && !selectingMatch && !placementPending && (
         <Text style={styles.waitingText}>
-          {isMyFlipTurn ? "Nobody's matched yet — tap the deck to flip if you have none" : `${players[round.turnIndex].name} flips next if nobody matches`}
+          {isMyFlipTurn
+            ? flipOnCooldown
+              ? "Nobody's matched yet — give everyone a moment before the next flip"
+              : "Nobody's matched yet — tap the deck to flip if you have none"
+            : `${players[round.turnIndex].name} flips next if nobody matches`}
         </Text>
       )}
 
