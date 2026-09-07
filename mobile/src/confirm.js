@@ -17,3 +17,12 @@ export function confirmAsync(title, message, confirmLabel = "OK") {
     ]);
   });
 }
+
+/** Same web-vs-native fallback as confirmAsync, for a plain one-button notice. */
+export function notify(title, message) {
+  if (Platform.OS === "web") {
+    window.alert(`${title}\n\n${message}`);
+    return;
+  }
+  Alert.alert(title, message);
+}

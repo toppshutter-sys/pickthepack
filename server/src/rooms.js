@@ -45,7 +45,7 @@ class RoomManager {
       code,
       packAmount, // 5 or 10
       players: [
-        { id: hostSocketId, name: hostName, connected: true, totalContributed: 0, totalWon: 0 },
+        { id: hostSocketId, name: hostName, connected: true, totalContributed: 0, totalWon: 0, isHost: true },
       ],
       potAmount: 0,
       dealerIndex: 0,
@@ -77,7 +77,7 @@ class RoomManager {
     if (room.players.some((p) => p.name.toLowerCase() === playerName.toLowerCase())) {
       throw new Error(`"${playerName}" is already at this table — enter a different name`);
     }
-    room.players.push({ id: socketId, name: playerName, connected: true, totalContributed: 0, totalWon: 0 });
+    room.players.push({ id: socketId, name: playerName, connected: true, totalContributed: 0, totalWon: 0, isHost: false });
     return room;
   }
 
@@ -88,6 +88,14 @@ class RoomManager {
    * the previous hand's cards are just a recap with nothing left to protect,
    * so a leave there resets the room to a fresh lobby rather than leaving
    * stale, now-mis-indexed hands on screen.
+   *
+   * Returns { room, closedFor }: `room` is the updated room (or null if it
+   * no longer exists), and `closedFor` is a socket id to notify directly —
+   * set when leaving drops the table to exactly one other player who isn't
+   * the host, since the game can't continue and that player didn't ask to
+   * leave themselves (see the one-player-left handling below), so there's
+   * no ordinary room-state broadcast that would tell their client to bail
+   * out to the home screen.
    */
   leaveRoom(code, socketId) {
     const room = this.rooms.get(code);
@@ -103,7 +111,7 @@ class RoomManager {
 
     if (room.players.length === 0) {
       this.rooms.delete(code);
-      return null;
+      return { room: null, closedFor: null };
     }
 
     if (idx < room.dealerIndex) room.dealerIndex -= 1;
@@ -115,7 +123,25 @@ class RoomManager {
     }
 
     this.addLog(room, `${leavingName} left the table.`);
-    return room;
+
+    // One player left doesn't leave enough for a game — the host gets to
+    // keep the (now-empty) table open in the lobby waiting for others;
+    // anyone else left solo has no table to "own", so it closes and they
+    // get sent home too, same as everyone else leaving would.
+    if (room.players.length === 1) {
+      const lastPlayer = room.players[0];
+      if (lastPlayer.isHost) {
+        room.status = "lobby";
+        room.round = null;
+        this.addLog(room, `${lastPlayer.name} is the only one left — waiting for more players.`);
+        return { room, closedFor: null };
+      }
+      const closedFor = lastPlayer.id;
+      this.rooms.delete(code);
+      return { room: null, closedFor };
+    }
+
+    return { room, closedFor: null };
   }
 
   /**

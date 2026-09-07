@@ -92,10 +92,16 @@ io.on("connection", (socket) => {
   socket.on(
     "leave-room",
     safeHandler(socket, ({ code }, ack) => {
-      const room = rooms.leaveRoom(code, socket.id);
+      const { room, closedFor } = rooms.leaveRoom(code, socket.id);
       socket.leave(code);
       ack({ ok: true });
       if (room) rooms.broadcastState(room, io);
+      // The last non-host player left solo after someone else left — the
+      // table closes; they didn't ask to leave, so there's no room-state
+      // broadcast to tell their client to bail out. Tell them directly.
+      if (closedFor) {
+        io.to(closedFor).emit("room-closed", { reason: "Everyone else left the table." });
+      }
     })
   );
 
