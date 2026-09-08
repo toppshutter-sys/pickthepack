@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Animated } from "
 import { emitWithAck } from "../socket";
 import GradientButton from "../components/GradientButton";
 import GlassPanel from "../components/GlassPanel";
+import InviteButton from "../components/InviteButton";
 import { centeredContent } from "../responsive";
 import { confirmAsync } from "../confirm";
 import { shareInvite } from "../inviteLink";
@@ -64,11 +65,10 @@ export default function LobbyScreen({ socket, roomState, code, onLeaveRoom }) {
       <Animated.View style={{ opacity: fadeIn, alignItems: "center", width: "100%" }}>
         <Text style={styles.title}>Table {code}</Text>
         {hasRoomForMore ? (
-          <TouchableOpacity onPress={handleShare} activeOpacity={0.7}>
-            <Text style={styles.shareHint}>
-              {linkCopied ? "✓ Link copied to clipboard!" : "📤 Invite players — WhatsApp, iMessage, text, email…"}
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.inviteBlock}>
+            <InviteButton onPress={handleShare} copied={linkCopied} />
+            <Text style={styles.shareHint}>WhatsApp, iMessage, text, email…</Text>
+          </View>
         ) : (
           <Text style={styles.shareHint}>Table full (6/6)</Text>
         )}
@@ -125,7 +125,8 @@ function PlayerRow({ index, name, isDealer, connected }) {
 const styles = StyleSheet.create({
   container: { ...centeredContent, padding: 24, paddingTop: 64, alignItems: "center" },
   title: { fontSize: 28, fontWeight: "800", color: "#f0cd7a", textShadowColor: "rgba(201,162,75,0.4)", textShadowRadius: 10, textShadowOffset: { width: 0, height: 0 } },
-  shareHint: { color: "#f0cd7a", marginTop: 4, marginBottom: 16 },
+  inviteBlock: { alignItems: "center", marginTop: 10, marginBottom: 18 },
+  shareHint: { color: "#93a99c", fontSize: 12, marginTop: 8 },
   packLabel: { color: "#e6efe9", fontSize: 16, marginBottom: 20 },
   playerList: { width: "100%", marginBottom: 20 },
   playerRow: {

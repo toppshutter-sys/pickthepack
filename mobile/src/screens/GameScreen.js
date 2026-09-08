@@ -4,6 +4,7 @@ import Hand from "../components/Hand";
 import Card from "../components/Card";
 import GradientButton from "../components/GradientButton";
 import GlassPanel from "../components/GlassPanel";
+import InviteButton from "../components/InviteButton";
 import { emitWithAck } from "../socket";
 import { centeredContent } from "../responsive";
 import { confirmAsync } from "../confirm";
@@ -307,11 +308,7 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
         <TouchableOpacity onPress={handleLeave} disabled={busy} activeOpacity={0.7}>
           <Text style={styles.leaveText}>Leave table</Text>
         </TouchableOpacity>
-        {isRoundOver && players.length < 6 && (
-          <TouchableOpacity onPress={handleShare} activeOpacity={0.7}>
-            <Text style={styles.inviteText}>{linkCopied ? "✓ Link copied!" : "📤 Invite players"}</Text>
-          </TouchableOpacity>
-        )}
+        {isRoundOver && players.length < 6 && <InviteButton onPress={handleShare} copied={linkCopied} />}
       </View>
 
       {winnerSet.size > 0 && (
@@ -558,7 +555,6 @@ const styles = StyleSheet.create({
   error: { color: "#ffb4b4", marginBottom: 12 },
   actionButton: { width: "100%", marginBottom: 24 },
   leaveTopButton: { marginBottom: 16 },
-  topLinksRow: { flexDirection: "row", justifyContent: "center", gap: 20, marginBottom: 16 },
+  topLinksRow: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 20, marginBottom: 16 },
   leaveText: { color: "#ffb4b4", fontSize: 14 },
-  inviteText: { color: "#f0cd7a", fontSize: 14 },
 });
