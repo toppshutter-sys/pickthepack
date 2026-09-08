@@ -250,13 +250,11 @@ function drawWithReshuffle(deck, tablePile, count, rng = Math.random) {
  *   - Tap the deck -> flipFromDeck(state, playerIdx): only the player whose
  *     turn it is to flip may do this, and only if THEY personally have no
  *     mandatory match sitting in their own hand (the mandatory-knock rule
- *     still applies to whoever is about to flip). PRIORITY: if the card
- *     they reveal matches something in their OWN hand, it's immediately
- *     theirs — auto-knocked on their behalf rather than opening to the
- *     free-for-all (and that can chain again if the resulting refill also
- *     matches them). Flipping, with or without a chained auto-knock,
- *     still only ever advances turnIndex by exactly one, to the player
- *     after the flipper.
+ *     still applies to whoever is about to flip). The newly revealed card
+ *     opens up to the free-for-all just like any other target — even the
+ *     flipper has to tap it themselves to claim a match, no automatic
+ *     priority. Flipping always advances turnIndex by exactly one, to the
+ *     player after the flipper.
  */
 /**
  * Core knock resolution, shared by attemptKnock and the auto-match chain
@@ -324,14 +322,15 @@ function _resolveKnock(state, playerIdx, matchCard, rng) {
 }
 
 /**
- * Priority rule: whenever a new card is revealed from the deck — a manual
- * flip, or a knock's own 1-card-left refill — the player who caused that
- * reveal gets it immediately if it's theirs to take, rather than it opening
- * up to the free-for-all. Repeatedly applies _resolveKnock for `playerIdx`
- * as long as their hand still has a mandatory match for whatever card is
- * currently face-up (their own refill can chain into another match, and so
- * on), stopping as soon as there's no card to check against (a
- * pendingPlacement), the round ends (a win), or they simply don't match.
+ * Chains a knock's own 1-card-left refill into further auto-matches: when
+ * knocking down to your last card forces the deck to auto-refill a new
+ * target (see _resolveKnock), and that refill also happens to match your
+ * one remaining card, it's immediately yours rather than opening up to the
+ * free-for-all — repeating for as long as each fresh refill keeps matching
+ * `playerIdx`'s hand. Stops as soon as there's no card left to check
+ * against (a pendingPlacement), the round ends (a win), or they simply
+ * don't match. NOT used for a manual flip — a flipped card always opens to
+ * the free-for-all, even for the flipper's own hand.
  */
 function _resolveAutoMatchChain(state, playerIdx, rng) {
   let current = state;
@@ -443,23 +442,19 @@ function flipFromDeck(state, playerIdx, rng = Math.random) {
     rng
   );
 
-  const flipped = {
+  // The newly revealed card opens up to the free-for-all just like any
+  // other target — even the flipper needs to tap it themselves to claim a
+  // match, no automatic priority. Flipping always advances the flip-turn
+  // exactly once, to the player after the flipper.
+  return {
     ...state,
     deck,
     tablePile,
     faceUpCard: drawn[0],
     winnerIndex: null,
     action: { type: "flip", playerIdx, card: drawn[0] },
+    turnIndex: (playerIdx + 1) % numPlayers,
   };
-
-  // Priority: if the flipper's own hand matches the card they just
-  // revealed, it's immediately theirs — auto-knocked (and able to chain
-  // further, per _resolveAutoMatchChain) rather than opening to the
-  // free-for-all. Either way, flipping (with or without a chained
-  // auto-knock) advances the flip-turn exactly once, to the player after
-  // the flipper.
-  const resolved = _resolveAutoMatchChain(flipped, playerIdx, rng);
-  return { ...resolved, turnIndex: (playerIdx + 1) % numPlayers };
 }
 
 /**
@@ -468,9 +463,10 @@ function flipFromDeck(state, playerIdx, rng = Math.random) {
  * card — used by bots (and by tests that don't care about the tap-driven
  * UI/free-for-all matching) rather than by real human players, who instead
  * call attemptKnock/flipFromDeck/placeTarget directly, and aren't limited
- * to acting only on their own flip-turn. A flip can now ALSO land on a
- * pendingPlacement (the flip-priority auto-knock chain can leave 2+ cards,
- * same as a direct knock can), so both branches resolve it the same way.
+ * to acting only on their own flip-turn. Only the knock branch can ever
+ * land on a pendingPlacement (a flip always opens the revealed card to the
+ * free-for-all, never auto-knocks) — the check below is shared regardless,
+ * since it's a no-op when there's nothing pending.
  */
 function playMatchingTurn(state, rng = Math.random) {
   if (state.winnerIndex !== null && state.winnerIndex !== undefined) {
