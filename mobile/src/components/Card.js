@@ -34,6 +34,8 @@ export default function Card({ card, size = "normal", onPress, disabled, tappabl
   const dims = { width: Math.round(baseWidth * scale), height: Math.round(baseHeight * scale) };
   const rankFontSize = Math.round((size === "small" ? 14 : 20) * scale);
   const suitFontSize = Math.round((size === "small" ? 13 : 19) * scale);
+  const cornerRankFontSize = Math.round((size === "small" ? 8 : 11) * scale);
+  const cornerSuitFontSize = Math.round((size === "small" ? 7 : 9.5) * scale);
   const isRed = card && RED_SUITS.has(card.suit);
 
   // Entrance: a quick pop-and-settle, staggered by `index` so a hand deals
@@ -114,6 +116,24 @@ export default function Card({ card, size = "normal", onPress, disabled, tappabl
     </LinearGradient>
   ) : (
     <LinearGradient colors={["#fffdf7", "#f2ecdd"]} start={{ x: 0.2, y: 0 }} end={{ x: 0.85, y: 1 }} style={[styles.card, dims, styles.face]}>
+      {/* Thin printed-border inset — real card stock has a rule line
+          framing the design a few mm in from the trimmed edge. */}
+      <View style={styles.printBorder} pointerEvents="none" />
+
+      {/* Corner indices (top-left, and the same mirrored bottom-right) —
+          the one detail that makes a card instantly read as "a real
+          playing card" rather than a plain rounded rectangle. The big
+          centered rank/suit stays too, for at-a-glance legibility at
+          arm's length in a digital table. */}
+      <View style={styles.cornerTL} pointerEvents="none">
+        <Text style={[styles.cornerRank, { fontSize: cornerRankFontSize }, isRed ? styles.red : styles.black]}>{card.rank}</Text>
+        <Text style={[styles.cornerSuit, { fontSize: cornerSuitFontSize }, isRed ? styles.red : styles.black]}>{SUIT_SYMBOL[card.suit]}</Text>
+      </View>
+      <View style={styles.cornerBR} pointerEvents="none">
+        <Text style={[styles.cornerRank, { fontSize: cornerRankFontSize }, isRed ? styles.red : styles.black]}>{card.rank}</Text>
+        <Text style={[styles.cornerSuit, { fontSize: cornerSuitFontSize }, isRed ? styles.red : styles.black]}>{SUIT_SYMBOL[card.suit]}</Text>
+      </View>
+
       <Text style={[styles.rank, { fontSize: rankFontSize }, isRed ? styles.red : styles.black]}>{card.rank}</Text>
       <Text style={[styles.suit, { fontSize: suitFontSize }, isRed ? styles.red : styles.black]}>{SUIT_SYMBOL[card.suit]}</Text>
     </LinearGradient>
@@ -159,12 +179,26 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginHorizontal: 4,
     shadowColor: "#000",
-    shadowOpacity: 0.22,
-    shadowOffset: { width: 0, height: 5 },
-    shadowRadius: 9,
-    elevation: 3,
+    shadowOpacity: 0.3,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 11,
+    elevation: 4,
   },
   face: {},
+  printBorder: {
+    position: "absolute",
+    top: 5,
+    left: 5,
+    right: 5,
+    bottom: 5,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.09)",
+  },
+  cornerTL: { position: "absolute", top: 4, left: 5, alignItems: "center" },
+  cornerBR: { position: "absolute", bottom: 4, right: 5, alignItems: "center", transform: [{ rotate: "180deg" }] },
+  cornerRank: { fontWeight: "800" },
+  cornerSuit: { marginTop: -1 },
   back: { borderWidth: 1, borderColor: colors.aquaDim },
   backEmblem: {
     width: "60%",
@@ -208,6 +242,6 @@ const styles = StyleSheet.create({
   },
   rank: { fontWeight: "800" },
   suit: {},
-  red: { color: "#d9463c" },
-  black: { color: "#20242a" },
+  red: { color: "#c8102e" },
+  black: { color: "#171512" },
 });

@@ -349,47 +349,52 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
         <KnockBanner playerName={round.lastKnock.playerName} card={round.lastKnock.card} />
       )}
 
-      <View style={styles.tableRow}>
-        <View style={styles.pileBlock}>
-          <Text style={styles.pileLabel}>Deck</Text>
-          <Card card={null} onPress={tapDeck} tappable={isMyFlipTurn && !flipOnCooldown} disabled={!isMyFlipTurn || busy || flipOnCooldown} />
-          <Text style={styles.pileCount}>{round.deckCount} left</Text>
-          {isMyFlipTurn ? (
-            <Text style={styles.tapHint}>
-              {flipOnCooldown ? `wait ${Math.ceil(flipCooldownRemainingMs / 1000)}s…` : "tap if no match"}
-            </Text>
-          ) : null}
-        </View>
+      {/* The actual "table" — a felt surface the deck and target card sit
+          on, with a warm rail trim, instead of cards floating directly on
+          the app's ambient background. */}
+      <LinearGradient colors={gradients.felt} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={styles.tableSurface}>
+        <View style={styles.tableRow}>
+          <View style={styles.pileBlock}>
+            <Text style={styles.pileLabel}>Deck</Text>
+            <Card card={null} onPress={tapDeck} tappable={isMyFlipTurn && !flipOnCooldown} disabled={!isMyFlipTurn || busy || flipOnCooldown} />
+            <Text style={styles.pileCount}>{round.deckCount} left</Text>
+            {isMyFlipTurn ? (
+              <Text style={styles.tapHint}>
+                {flipOnCooldown ? `wait ${Math.ceil(flipCooldownRemainingMs / 1000)}s…` : "tap if no match"}
+              </Text>
+            ) : null}
+          </View>
 
-        <View style={styles.pileBlock}>
-          <Text style={styles.pileLabel}>
-            {isInstantWin && round.faceUpCard
-              ? "Dealer's card"
-              : round.faceUpCard
-              ? "Match this card"
-              : placementPending
-              ? "Choosing new target…"
-              : "No flip needed"}
-          </Text>
-          {round.faceUpCard ? (
-            <Card
-              card={round.faceUpCard}
-              onPress={tapTargetCard}
-              tappable={!isInstantWin && !isRoundOver}
-              selected={selectingMatch}
-              disabled={isInstantWin || isRoundOver || busy}
-            />
-          ) : (
-            <View style={styles.emptyPileSlot}>
-              <Text style={styles.emptyPileText}>—</Text>
-            </View>
-          )}
-          <Text style={styles.pileCount}>{round.tablePileCount} retired</Text>
-          {!isInstantWin && !isRoundOver && round.faceUpCard ? (
-            <Text style={styles.tapHint}>{selectingMatch ? "tap again to cancel" : "tap if you have a match"}</Text>
-          ) : null}
+          <View style={styles.pileBlock}>
+            <Text style={styles.pileLabel}>
+              {isInstantWin && round.faceUpCard
+                ? "Dealer's card"
+                : round.faceUpCard
+                ? "Match this card"
+                : placementPending
+                ? "Choosing new target…"
+                : "No flip needed"}
+            </Text>
+            {round.faceUpCard ? (
+              <Card
+                card={round.faceUpCard}
+                onPress={tapTargetCard}
+                tappable={!isInstantWin && !isRoundOver}
+                selected={selectingMatch}
+                disabled={isInstantWin || isRoundOver || busy}
+              />
+            ) : (
+              <View style={styles.emptyPileSlot}>
+                <Text style={styles.emptyPileText}>—</Text>
+              </View>
+            )}
+            <Text style={styles.pileCount}>{round.tablePileCount} retired</Text>
+            {!isInstantWin && !isRoundOver && round.faceUpCard ? (
+              <Text style={styles.tapHint}>{selectingMatch ? "tap again to cancel" : "tap if you have a match"}</Text>
+            ) : null}
+          </View>
         </View>
-      </View>
+      </LinearGradient>
 
       <View style={styles.yourBlock}>
         <Text style={styles.yourLabel}>
@@ -539,7 +544,21 @@ const styles = StyleSheet.create({
   opponentBlock: { alignItems: "center", marginHorizontal: 10, marginBottom: 10 },
   opponentName: { color: colors.textPrimary, marginBottom: 4, fontSize: 13 },
   activeName: { color: colors.sunGold, fontWeight: "700" },
-  tableRow: { flexDirection: "row", justifyContent: "center", gap: 30, marginBottom: 20 },
+  tableSurface: {
+    width: "100%",
+    borderRadius: 22,
+    paddingVertical: 22,
+    paddingHorizontal: 16,
+    marginBottom: 20,
+    borderWidth: 2,
+    borderColor: colors.rail,
+    shadowColor: "#000",
+    shadowOpacity: 0.35,
+    shadowOffset: { width: 0, height: 10 },
+    shadowRadius: 18,
+    elevation: 6,
+  },
+  tableRow: { flexDirection: "row", justifyContent: "center", gap: 30 },
   pileBlock: { alignItems: "center", marginHorizontal: 10 },
   pileLabel: { color: colors.textMuted, marginBottom: 6, fontSize: 12 },
   pileCount: { color: colors.textMuted, fontSize: 11, marginTop: 6 },

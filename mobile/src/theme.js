@@ -41,6 +41,12 @@ export const colors = {
   // instead of the old plain dark tint.
   glassBg: "rgba(18,60,58,0.30)",
   glassBorder: "rgba(94,231,208,0.22)",
+
+  // The playing table's felt surface (see GameScreen's tableSurface) and
+  // its warm wood/rail-style trim.
+  feltLight: "rgba(24,100,90,0.55)",
+  feltDark: "rgba(4,26,24,0.65)",
+  rail: "rgba(245,167,90,0.4)",
 };
 
 export const gradients = {
@@ -48,6 +54,9 @@ export const gradients = {
   backgroundLocations: [0, 0.42, 1],
   sunset: [colors.sunGold, colors.sunAmber, colors.sunCoral],
   cardBack: ["#0f5c58", "#062f2c"],
+  // Felt lit from above — lighter at the top where the deck/target card
+  // sit, darkening toward the bottom, like a table lamp over real felt.
+  felt: [colors.feltLight, colors.feltDark],
 };
 
 export const shadows = {
