@@ -114,6 +114,7 @@ export default function HomeScreen({ onEnterRoom }) {
             <Logo size={92} />
           </View>
           <Text style={styles.title}>Pick the Pack</Text>
+          <Text style={styles.welcome}>Welcome! 🌴</Text>
           <Text style={styles.subtitle}>Choose your pack, join the table.</Text>
         </Animated.View>
 
@@ -225,7 +226,8 @@ const styles = StyleSheet.create({
   container: { ...centeredContent, padding: 24, paddingTop: 64, paddingBottom: 48 },
   logoWrap: { marginBottom: 14 },
   title: { fontSize: 32, fontWeight: "800", color: colors.sunGold, textAlign: "center", letterSpacing: 0.3, textShadowColor: "rgba(245,167,90,0.45)", textShadowRadius: 14, textShadowOffset: { width: 0, height: 0 } },
-  subtitle: { fontSize: 14, color: colors.textSecondary, textAlign: "center", marginBottom: 24 },
+  welcome: { fontSize: 15, fontWeight: "700", color: colors.aqua, textAlign: "center", marginTop: 6 },
+  subtitle: { fontSize: 14, color: colors.textSecondary, textAlign: "center", marginTop: 4, marginBottom: 24 },
   label: { color: colors.textPrimary, marginTop: 12, marginBottom: 4, fontWeight: "600" },
   hint: { color: colors.textMuted, fontSize: 12, marginBottom: 4 },
   advancedLink: { color: colors.textMuted, fontSize: 12, marginTop: 8, textDecorationLine: "underline" },
