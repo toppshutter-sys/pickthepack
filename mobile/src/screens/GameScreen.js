@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Animated, Easing } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import Hand from "../components/Hand";
 import Card from "../components/Card";
 import GradientButton from "../components/GradientButton";
@@ -9,6 +10,7 @@ import { emitWithAck } from "../socket";
 import { centeredContent } from "../responsive";
 import { confirmAsync } from "../confirm";
 import { shareInvite } from "../inviteLink";
+import { colors, gradients } from "../theme";
 
 function isFlipTurn(round, isInstantWin, isRoundOver, playerIndex) {
   const placementPending =
@@ -39,9 +41,9 @@ function formatNet(n) {
 }
 
 function netPillBorderColor(n) {
-  if (n > 0) return "rgba(127,214,166,0.45)";
-  if (n < 0) return "rgba(255,180,180,0.4)";
-  return "rgba(147,169,150,0.35)";
+  if (n > 0) return "rgba(92,214,138,0.45)";
+  if (n < 0) return "rgba(255,145,132,0.4)";
+  return colors.aquaDim;
 }
 
 function netTextStyle(n) {
@@ -224,7 +226,7 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
           <Text style={styles.leaveText}>Leave table</Text>
         </TouchableOpacity>
 
-        <View style={styles.dealerCardBanner}>
+        <LinearGradient colors={gradients.sunset} start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }} style={styles.dealerCardBanner}>
           <Text style={styles.dealerCardTitle}>
             🃏 {players[roomState.dealerIndex].name} deals the {round.faceUpCard.rank} of {round.faceUpCard.suit}
           </Text>
@@ -234,7 +236,7 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
           <Text style={styles.dealerCardSubtitle}>
             Dealer wins ${round.wonAmount} instantly! Recast your bet to continue with the same hand.
           </Text>
-        </View>
+        </LinearGradient>
 
         <View style={styles.playerList}>
           {players.map((p, i) => (
@@ -456,7 +458,7 @@ function KnockBanner({ playerName, card }) {
         marginBottom: 16,
       }}
     >
-      <GlassPanel style={styles.knockBanner} borderColor="#f0cd7a">
+      <GlassPanel style={styles.knockBanner} borderColor={colors.sunGold}>
         <Text style={styles.knockText}>
           🔔 {playerName} knocked the {card.rank} of {card.suit}
         </Text>
@@ -475,21 +477,22 @@ function WinnerBanner({ isSplit, names, categoryText }) {
 
   return (
     <Animated.View
-      style={[
-        styles.winnerBanner,
-        {
-          opacity: enter,
-          transform: [
-            { scale: enter.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) },
-            { translateY: enter.interpolate({ inputRange: [0, 1], outputRange: [-14, 0] }) },
-          ],
-        },
-      ]}
+      style={{
+        opacity: enter,
+        width: "100%",
+        marginBottom: 16,
+        transform: [
+          { scale: enter.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) },
+          { translateY: enter.interpolate({ inputRange: [0, 1], outputRange: [-14, 0] }) },
+        ],
+      }}
     >
-      <Text style={styles.winnerTitle}>
-        🏆 {isSplit ? "Split Pot!" : "Winner!"} {names}
-      </Text>
-      <Text style={styles.winnerCategory}>{categoryText}</Text>
+      <LinearGradient colors={gradients.sunset} start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }} style={styles.winnerBanner}>
+        <Text style={styles.winnerTitle}>
+          🏆 {isSplit ? "Split Pot!" : "Winner!"} {names}
+        </Text>
+        <Text style={styles.winnerCategory}>{categoryText}</Text>
+      </LinearGradient>
     </Animated.View>
   );
 }
@@ -498,26 +501,24 @@ const styles = StyleSheet.create({
   container: { ...centeredContent, padding: 20, paddingTop: 56, alignItems: "center" },
   info: { color: "#fff", fontSize: 16 },
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", width: "100%", marginBottom: 16 },
-  potText: { color: "#f0cd7a", fontSize: 20, fontWeight: "800", textShadowColor: "rgba(201,162,75,0.4)", textShadowRadius: 10, textShadowOffset: { width: 0, height: 0 } },
+  potText: { color: colors.sunGold, fontSize: 20, fontWeight: "800", letterSpacing: 0.2, textShadowColor: "rgba(245,167,90,0.4)", textShadowRadius: 10, textShadowOffset: { width: 0, height: 0 } },
   packBadge: { paddingHorizontal: 12, paddingVertical: 4 },
-  packText: { color: "#e6efe9", fontSize: 13 },
+  packText: { color: colors.textPrimary, fontSize: 13 },
   winnerBanner: {
-    borderRadius: 12, padding: 16, marginBottom: 16, width: "100%", alignItems: "center",
-    backgroundColor: "#c9a24b",
-    shadowColor: "#c9a24b", shadowOpacity: 0.4, shadowOffset: { width: 0, height: 8 }, shadowRadius: 20, elevation: 6,
+    borderRadius: 16, padding: 16, width: "100%", alignItems: "center",
+    shadowColor: colors.sunCoral, shadowOpacity: 0.4, shadowOffset: { width: 0, height: 8 }, shadowRadius: 20, elevation: 6,
   },
-  winnerTitle: { color: "#2a2107", fontWeight: "800", fontSize: 17, textAlign: "center" },
-  winnerCategory: { color: "#4a3a10", fontSize: 13, marginTop: 4 },
+  winnerTitle: { color: "#2a1a0a", fontWeight: "800", fontSize: 17, textAlign: "center" },
+  winnerCategory: { color: "#4a2f14", fontSize: 13, marginTop: 4 },
   knockBanner: { paddingVertical: 10, paddingHorizontal: 14, alignItems: "center" },
-  knockText: { color: "#f0cd7a", fontWeight: "700", fontSize: 13 },
+  knockText: { color: colors.sunGold, fontWeight: "700", fontSize: 13 },
   dealerCardBanner: {
-    borderRadius: 12, padding: 16, marginBottom: 16, width: "100%", alignItems: "center",
-    backgroundColor: "#c9a24b",
-    shadowColor: "#c9a24b", shadowOpacity: 0.4, shadowOffset: { width: 0, height: 8 }, shadowRadius: 20, elevation: 6,
+    borderRadius: 16, padding: 16, marginBottom: 16, width: "100%", alignItems: "center",
+    shadowColor: colors.sunCoral, shadowOpacity: 0.4, shadowOffset: { width: 0, height: 8 }, shadowRadius: 20, elevation: 6,
   },
-  dealerCardTitle: { color: "#2a2107", fontWeight: "800", fontSize: 16, textAlign: "center" },
+  dealerCardTitle: { color: "#2a1a0a", fontWeight: "800", fontSize: 16, textAlign: "center" },
   dealerCardImageWrap: { marginTop: 10 },
-  dealerCardSubtitle: { color: "#4a3a10", fontSize: 13, marginTop: 6, textAlign: "center" },
+  dealerCardSubtitle: { color: "#4a2f14", fontSize: 13, marginTop: 6, textAlign: "center" },
   playerList: { width: "100%", marginBottom: 20 },
   recastRow: {
     flexDirection: "row", justifyContent: "space-between", alignItems: "center",
@@ -525,36 +526,36 @@ const styles = StyleSheet.create({
   },
   recastName: { color: "#fff", fontSize: 16 },
   recastNameCol: { alignItems: "flex-start" },
-  recastDone: { color: "#7fd6a6", fontSize: 13, fontWeight: "700" },
-  recastPending: { color: "#93a99c", fontSize: 13 },
+  recastDone: { color: colors.positive, fontSize: 13, fontWeight: "700" },
+  recastPending: { color: colors.textMuted, fontSize: 13 },
   netPill: { paddingHorizontal: 10, paddingVertical: 3, marginTop: 3, marginBottom: 6 },
   netPillLarge: { paddingHorizontal: 14, paddingVertical: 5, marginBottom: 10 },
   netPillText: { fontSize: 11, fontWeight: "700" },
   netPillTextLarge: { fontSize: 13.5 },
-  netTextPositive: { color: "#7fd6a6" },
-  netTextNegative: { color: "#ffb4b4" },
-  netTextZero: { color: "#93a99c" },
+  netTextPositive: { color: colors.positive },
+  netTextNegative: { color: colors.negative },
+  netTextZero: { color: colors.textMuted },
   opponents: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", marginBottom: 20 },
   opponentBlock: { alignItems: "center", marginHorizontal: 10, marginBottom: 10 },
-  opponentName: { color: "#e6efe9", marginBottom: 4, fontSize: 13 },
-  activeName: { color: "#f0cd7a", fontWeight: "700" },
+  opponentName: { color: colors.textPrimary, marginBottom: 4, fontSize: 13 },
+  activeName: { color: colors.sunGold, fontWeight: "700" },
   tableRow: { flexDirection: "row", justifyContent: "center", gap: 30, marginBottom: 20 },
   pileBlock: { alignItems: "center", marginHorizontal: 10 },
-  pileLabel: { color: "#93a99c", marginBottom: 6, fontSize: 12 },
-  pileCount: { color: "#93a99c", fontSize: 11, marginTop: 6 },
+  pileLabel: { color: colors.textMuted, marginBottom: 6, fontSize: 12 },
+  pileCount: { color: colors.textMuted, fontSize: 11, marginTop: 6 },
   emptyPileSlot: {
-    width: 56, height: 78, borderRadius: 9, borderWidth: 1.5, borderColor: "#3a6455", borderStyle: "dashed",
+    width: 56, height: 78, borderRadius: 11, borderWidth: 1.5, borderColor: colors.aquaDim, borderStyle: "dashed",
     alignItems: "center", justifyContent: "center",
   },
-  emptyPileText: { color: "#4a7864", fontSize: 20 },
-  tapHint: { color: "#f0cd7a", fontSize: 10.5, marginTop: 4, fontStyle: "italic" },
+  emptyPileText: { color: colors.aqua, fontSize: 20 },
+  tapHint: { color: colors.sunGold, fontSize: 10.5, marginTop: 4, fontStyle: "italic" },
   yourBlock: { alignItems: "center", marginBottom: 20 },
   yourLabel: { color: "#fff", fontWeight: "700", marginBottom: 8, fontSize: 15 },
-  turnHint: { color: "#f0cd7a", fontSize: 12.5, marginBottom: 10, textAlign: "center" },
-  waitingText: { color: "#93a99c", fontSize: 13, marginBottom: 16, textAlign: "center" },
-  error: { color: "#ffb4b4", marginBottom: 12 },
+  turnHint: { color: colors.sunGold, fontSize: 12.5, marginBottom: 10, textAlign: "center" },
+  waitingText: { color: colors.textMuted, fontSize: 13, marginBottom: 16, textAlign: "center" },
+  error: { color: colors.negative, marginBottom: 12 },
   actionButton: { width: "100%", marginBottom: 24 },
   leaveTopButton: { marginBottom: 16 },
   topLinksRow: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 20, marginBottom: 16 },
-  leaveText: { color: "#ffb4b4", fontSize: 14 },
+  leaveText: { color: colors.negative, fontSize: 14 },
 });

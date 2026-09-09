@@ -2,6 +2,7 @@ import React, { useRef } from "react";
 import { Text, StyleSheet, Pressable, Animated } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
+import { colors, gradients } from "../theme";
 
 /**
  * Shared button used across every screen so the app has one consistent,
@@ -40,7 +41,7 @@ export default function GradientButton({ onPress, disabled, children, variant = 
         {disabled ? (
           <Animated.View style={[styles.primary, styles.disabledPrimary]}>{label}</Animated.View>
         ) : (
-          <LinearGradient colors={["#f0cd7a", "#c9a24b", "#93712f"]} start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }} style={styles.primary}>
+          <LinearGradient colors={gradients.sunset} start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }} style={styles.primary}>
             {label}
           </LinearGradient>
         )}
@@ -51,27 +52,27 @@ export default function GradientButton({ onPress, disabled, children, variant = 
 
 const styles = StyleSheet.create({
   primary: {
-    borderRadius: 14,
+    borderRadius: 16,
     paddingVertical: 15,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#c9a24b",
-    shadowOpacity: 0.28,
+    shadowColor: colors.sunCoral,
+    shadowOpacity: 0.32,
     shadowOffset: { width: 0, height: 8 },
     shadowRadius: 20,
     elevation: 5,
   },
-  disabledPrimary: { backgroundColor: "#5c5442", shadowOpacity: 0 },
-  primaryText: { color: "#2a2107", fontWeight: "800", fontSize: 16, letterSpacing: 0.2 },
+  disabledPrimary: { backgroundColor: "#4a4640", shadowOpacity: 0 },
+  primaryText: { color: "#2a1a0a", fontWeight: "800", fontSize: 16, letterSpacing: 0.2 },
   secondary: {
-    borderRadius: 14,
+    borderRadius: 16,
     paddingVertical: 15,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "rgba(201,162,75,0.5)",
-    backgroundColor: "rgba(255,255,255,0.03)",
+    borderColor: colors.aquaDim,
+    backgroundColor: "rgba(94,231,208,0.05)",
   },
   disabledSecondary: { opacity: 0.5 },
-  secondaryText: { color: "#f2f6f3", fontWeight: "700", fontSize: 16 },
+  secondaryText: { color: colors.textPrimary, fontWeight: "700", fontSize: 16 },
 });

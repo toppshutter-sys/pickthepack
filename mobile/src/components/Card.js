@@ -3,12 +3,13 @@ import { View, Text, StyleSheet, Pressable, Animated, Easing } from "react-nativ
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { useScale } from "../responsive";
+import { colors, gradients } from "../theme";
 
 const RED_SUITS = new Set(["hearts", "diamonds"]);
 const SUIT_SYMBOL = { hearts: "♥", diamonds: "♦", spades: "♠", clubs: "♣" };
 
-const GOLD = "#c9a24b";
-const GOLD_BRIGHT = "#f0cd7a";
+const GOLD = colors.sunAmber;
+const GOLD_BRIGHT = colors.sunGold;
 
 /**
  * Renders one playing card. Pass `card = null` for a hidden opponent card
@@ -102,13 +103,13 @@ export default function Card({ card, size = "normal", onPress, disabled, tappabl
   };
 
   const face = !card ? (
-    <LinearGradient colors={["#1c5442", "#0a2a20"]} start={{ x: 0.15, y: 0 }} end={{ x: 0.9, y: 1 }} style={[styles.card, dims, styles.back]}>
+    <LinearGradient colors={gradients.cardBack} start={{ x: 0.15, y: 0 }} end={{ x: 0.9, y: 1 }} style={[styles.card, dims, styles.back]}>
       <View style={styles.backEmblem}>
         <Text style={[styles.backEmblemText, { fontSize: emblemFontSize }]}>♠</Text>
       </View>
     </LinearGradient>
   ) : (
-    <LinearGradient colors={["#ffffff", "#edf1ee"]} start={{ x: 0.2, y: 0 }} end={{ x: 0.85, y: 1 }} style={[styles.card, dims, styles.face]}>
+    <LinearGradient colors={["#fffdf7", "#f2ecdd"]} start={{ x: 0.2, y: 0 }} end={{ x: 0.85, y: 1 }} style={[styles.card, dims, styles.face]}>
       <Text style={[styles.rank, { fontSize: rankFontSize }, isRed ? styles.red : styles.black]}>{card.rank}</Text>
       <Text style={[styles.suit, { fontSize: suitFontSize }, isRed ? styles.red : styles.black]}>{SUIT_SYMBOL[card.suit]}</Text>
     </LinearGradient>
@@ -160,17 +161,17 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   face: {},
-  back: { borderWidth: 1, borderColor: "rgba(201,162,75,0.35)" },
+  back: { borderWidth: 1, borderColor: colors.aquaDim },
   backEmblem: {
     width: "58%",
     height: "58%",
     borderRadius: 5,
     borderWidth: 1.5,
-    borderColor: "rgba(201,162,75,0.55)",
+    borderColor: colors.aquaDim,
     alignItems: "center",
     justifyContent: "center",
   },
-  backEmblemText: { color: "rgba(240,205,122,0.85)", fontWeight: "800" },
+  backEmblemText: { color: "rgba(94,231,208,0.85)", fontWeight: "800" },
   rank: { fontWeight: "800" },
   suit: {},
   red: { color: "#d9463c" },

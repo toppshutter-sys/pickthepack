@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { StyleSheet, StatusBar } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { StyleSheet, StatusBar, View, Animated, Easing } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import HomeScreen from "./src/screens/HomeScreen";
@@ -7,6 +7,70 @@ import LobbyScreen from "./src/screens/LobbyScreen";
 import GameScreen from "./src/screens/GameScreen";
 import { emitWithAck } from "./src/socket";
 import { notify } from "./src/confirm";
+import { gradients } from "./src/theme";
+
+/**
+ * Two soft, slowly drifting light blobs behind everything — a warm sun
+ * glow and a cool aqua glow, like sunlight moving on lagoon water. Purely
+ * ambient (pointerEvents="none") so it never interferes with taps; gives
+ * the app a bit of life even on static screens like the home form.
+ */
+function AmbientGlow() {
+  const driftA = useRef(new Animated.Value(0)).current;
+  const driftB = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loopA = Animated.loop(
+      Animated.sequence([
+        Animated.timing(driftA, { toValue: 1, duration: 9000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(driftA, { toValue: 0, duration: 9000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      ])
+    );
+    const loopB = Animated.loop(
+      Animated.sequence([
+        Animated.timing(driftB, { toValue: 1, duration: 13000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(driftB, { toValue: 0, duration: 13000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      ])
+    );
+    loopA.start();
+    loopB.start();
+    return () => {
+      loopA.stop();
+      loopB.stop();
+    };
+  }, []);
+
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      <Animated.View
+        style={[
+          styles.blobSun,
+          {
+            transform: [
+              { translateX: driftA.interpolate({ inputRange: [0, 1], outputRange: [0, -30] }) },
+              { translateY: driftA.interpolate({ inputRange: [0, 1], outputRange: [0, 35] }) },
+            ],
+          },
+        ]}
+      >
+        <LinearGradient colors={["rgba(245,167,90,0.24)", "rgba(245,167,90,0)"]} style={StyleSheet.absoluteFill} />
+      </Animated.View>
+      <Animated.View
+        style={[
+          styles.blobAqua,
+          {
+            transform: [
+              { translateX: driftB.interpolate({ inputRange: [0, 1], outputRange: [0, 25] }) },
+              { translateY: driftB.interpolate({ inputRange: [0, 1], outputRange: [0, -30] }) },
+            ],
+          },
+        ]}
+      >
+        <LinearGradient colors={["rgba(94,231,208,0.20)", "rgba(94,231,208,0)"]} style={StyleSheet.absoluteFill} />
+      </Animated.View>
+    </View>
+  );
+}
 
 export default function App() {
   const [session, setSession] = useState(null); // { socket, code, playerName, serverUrl }
@@ -87,7 +151,8 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <LinearGradient colors={["#1a5a44", "#123f30", "#061a14"]} locations={[0, 0.45, 1]} style={styles.safe}>
+      <LinearGradient colors={gradients.background} locations={gradients.backgroundLocations} style={styles.safe}>
+        <AmbientGlow />
         <SafeAreaView style={styles.safe}>
           <StatusBar barStyle="light-content" />
           {content}
@@ -98,5 +163,28 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1 },
+  // overflow: "hidden" is load-bearing on web — the ambient glow blobs
+  // below are deliberately positioned partly off-screen (negative
+  // top/right/bottom/left) to peek in from the edges, and without clipping
+  // here that extends the actual page's scrollable width/height rather
+  // than just being cropped from view.
+  safe: { flex: 1, overflow: "hidden" },
+  blobSun: {
+    position: "absolute",
+    top: -60,
+    right: -80,
+    width: 340,
+    height: 340,
+    borderRadius: 170,
+    overflow: "hidden",
+  },
+  blobAqua: {
+    position: "absolute",
+    bottom: -40,
+    left: -90,
+    width: 300,
+    height: 300,
+    borderRadius: 150,
+    overflow: "hidden",
+  },
 });

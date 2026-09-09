@@ -2,6 +2,7 @@ import React, { useRef, useEffect } from "react";
 import { Text, StyleSheet, Pressable, Animated, Easing } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
+import { colors, gradients } from "../theme";
 
 /**
  * The "invite more players" call to action — a gold pill instead of plain
@@ -37,8 +38,8 @@ export default function InviteButton({ onPress, copied, style }) {
 
   return (
     <Pressable onPress={onPress} onPressIn={onPressIn} onPressOut={onPressOut}>
-      <Animated.View style={[{ transform: [{ scale }], shadowColor: "#f0cd7a", shadowOpacity, shadowRadius, shadowOffset: { width: 0, height: 0 } }, style]}>
-        <LinearGradient colors={["#f0cd7a", "#c9a24b", "#93712f"]} start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }} style={styles.pill}>
+      <Animated.View style={[{ transform: [{ scale }], shadowColor: colors.sunCoral, shadowOpacity, shadowRadius, shadowOffset: { width: 0, height: 0 } }, style]}>
+        <LinearGradient colors={gradients.sunset} start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }} style={styles.pill}>
           <Text style={styles.text}>{copied ? "✓ Link copied!" : "📤  Invite players"}</Text>
         </LinearGradient>
       </Animated.View>
@@ -56,5 +57,5 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     elevation: 5,
   },
-  text: { color: "#2a2107", fontWeight: "800", fontSize: 14.5, letterSpacing: 0.2 },
+  text: { color: "#2a1a0a", fontWeight: "800", fontSize: 14.5, letterSpacing: 0.2 },
 });

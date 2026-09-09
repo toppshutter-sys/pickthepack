@@ -7,6 +7,7 @@ import InviteButton from "../components/InviteButton";
 import { centeredContent } from "../responsive";
 import { confirmAsync } from "../confirm";
 import { shareInvite } from "../inviteLink";
+import { colors } from "../theme";
 
 export default function LobbyScreen({ socket, roomState, code, onLeaveRoom }) {
   const [error, setError] = useState("");
@@ -124,10 +125,10 @@ function PlayerRow({ index, name, isDealer, connected }) {
 
 const styles = StyleSheet.create({
   container: { ...centeredContent, padding: 24, paddingTop: 64, alignItems: "center" },
-  title: { fontSize: 28, fontWeight: "800", color: "#f0cd7a", textShadowColor: "rgba(201,162,75,0.4)", textShadowRadius: 10, textShadowOffset: { width: 0, height: 0 } },
+  title: { fontSize: 28, fontWeight: "800", color: colors.sunGold, letterSpacing: 0.3, textShadowColor: "rgba(245,167,90,0.4)", textShadowRadius: 10, textShadowOffset: { width: 0, height: 0 } },
   inviteBlock: { alignItems: "center", marginTop: 10, marginBottom: 18 },
-  shareHint: { color: "#93a99c", fontSize: 12, marginTop: 8 },
-  packLabel: { color: "#e6efe9", fontSize: 16, marginBottom: 20 },
+  shareHint: { color: colors.textMuted, fontSize: 12, marginTop: 8 },
+  packLabel: { color: colors.textPrimary, fontSize: 16, marginBottom: 20 },
   playerList: { width: "100%", marginBottom: 20 },
   playerRow: {
     flexDirection: "row",
@@ -136,12 +137,12 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   playerName: { color: "#fff", fontSize: 16 },
-  playerStatus: { color: "#7fd6a6", fontSize: 13 },
-  playerStatusOffline: { color: "#93a99c" },
-  hint: { color: "#93a99c", marginBottom: 12 },
-  error: { color: "#ffb4b4", marginBottom: 12 },
+  playerStatus: { color: colors.positive, fontSize: 13 },
+  playerStatusOffline: { color: colors.textMuted },
+  hint: { color: colors.textMuted, marginBottom: 12 },
+  error: { color: colors.negative, marginBottom: 12 },
   startButton: { width: "100%", paddingHorizontal: 40 },
   leaveButton: { marginTop: 16 },
-  leaveText: { color: "#ffb4b4", fontSize: 14 },
-  footnote: { color: "#93a99c", fontSize: 12, marginTop: 20, textAlign: "center" },
+  leaveText: { color: colors.negative, fontSize: 14 },
+  footnote: { color: colors.textMuted, fontSize: 12, marginTop: 20, textAlign: "center" },
 });

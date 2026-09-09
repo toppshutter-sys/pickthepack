@@ -14,6 +14,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getSocket, emitWithAck } from "../socket";
 import GradientButton from "../components/GradientButton";
 import { centeredContent } from "../responsive";
+import { colors } from "../theme";
 
 const STORAGE_KEY = "pick-the-pack:home-form";
 
@@ -125,7 +126,7 @@ export default function HomeScreen({ onEnterRoom }) {
               autoCapitalize="none"
               autoCorrect={false}
               placeholder="https://pickthepack.onrender.com"
-              placeholderTextColor="#8b8b8b"
+              placeholderTextColor="#9c8f78"
             />
             <Text style={styles.hint}>
               Your computer's LAN IP + port while the server runs locally (not "localhost" — see the
@@ -144,7 +145,7 @@ export default function HomeScreen({ onEnterRoom }) {
           value={playerName}
           onChangeText={setPlayerName}
           placeholder="e.g. Rosario"
-          placeholderTextColor="#8b8b8b"
+          placeholderTextColor="#9c8f78"
         />
 
         <Text style={styles.label}>Pack</Text>
@@ -178,7 +179,7 @@ export default function HomeScreen({ onEnterRoom }) {
           onChangeText={(t) => setJoinCode(t.toUpperCase())}
           autoCapitalize="characters"
           placeholder="ABCDE"
-          placeholderTextColor="#8b8b8b"
+          placeholderTextColor="#9c8f78"
         />
         <GradientButton onPress={handleJoin} disabled={busy} variant="secondary" style={styles.secondaryButton}>
           {busy ? "Working…" : "Join Room"}
@@ -222,19 +223,19 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   container: { ...centeredContent, padding: 24, paddingTop: 64, paddingBottom: 48 },
   titleBadge: {
-    alignSelf: "center", width: 46, height: 54, borderRadius: 8, backgroundColor: "#f5f7f5",
+    alignSelf: "center", width: 46, height: 54, borderRadius: 12, backgroundColor: "#fdf6e8",
     alignItems: "center", justifyContent: "center", marginBottom: 10,
-    shadowColor: "#000", shadowOpacity: 0.35, shadowOffset: { width: 0, height: 4 }, shadowRadius: 8, elevation: 4,
+    shadowColor: colors.sunCoral, shadowOpacity: 0.4, shadowOffset: { width: 0, height: 4 }, shadowRadius: 10, elevation: 4,
   },
   titleBadgeText: { color: "#1a1a1a", fontWeight: "800", fontSize: 20 },
-  title: { fontSize: 32, fontWeight: "800", color: "#f0cd7a", textAlign: "center", textShadowColor: "rgba(201,162,75,0.4)", textShadowRadius: 12, textShadowOffset: { width: 0, height: 0 } },
-  subtitle: { fontSize: 14, color: "#c9d8cf", textAlign: "center", marginBottom: 24 },
-  label: { color: "#e6efe9", marginTop: 12, marginBottom: 4, fontWeight: "600" },
-  hint: { color: "#93a99c", fontSize: 12, marginBottom: 4 },
-  advancedLink: { color: "#93a99c", fontSize: 12, marginTop: 8, textDecorationLine: "underline" },
+  title: { fontSize: 32, fontWeight: "800", color: colors.sunGold, textAlign: "center", letterSpacing: 0.3, textShadowColor: "rgba(245,167,90,0.45)", textShadowRadius: 14, textShadowOffset: { width: 0, height: 0 } },
+  subtitle: { fontSize: 14, color: colors.textSecondary, textAlign: "center", marginBottom: 24 },
+  label: { color: colors.textPrimary, marginTop: 12, marginBottom: 4, fontWeight: "600" },
+  hint: { color: colors.textMuted, fontSize: 12, marginBottom: 4 },
+  advancedLink: { color: colors.textMuted, fontSize: 12, marginTop: 8, textDecorationLine: "underline" },
   input: {
-    backgroundColor: "rgba(255,255,255,0.92)",
-    borderRadius: 10,
+    backgroundColor: "rgba(253,246,232,0.94)",
+    borderRadius: 12,
     paddingHorizontal: 13,
     paddingVertical: 11,
     fontSize: 16,
@@ -244,19 +245,19 @@ const styles = StyleSheet.create({
   packButton: {
     flex: 1,
     borderWidth: 1,
-    borderColor: "rgba(201,162,75,0.5)",
-    backgroundColor: "rgba(255,255,255,0.03)",
-    borderRadius: 10,
+    borderColor: colors.aquaDim,
+    backgroundColor: "rgba(94,231,208,0.05)",
+    borderRadius: 12,
     paddingVertical: 12,
     alignItems: "center",
     marginRight: 8,
   },
-  packButtonActive: { backgroundColor: "#c9a24b", borderColor: "#f0cd7a" },
-  packButtonText: { color: "#f0cd7a", fontWeight: "700" },
-  packButtonTextActive: { color: "#2a2107" },
+  packButtonActive: { backgroundColor: colors.sunAmber, borderColor: colors.sunGold },
+  packButtonText: { color: colors.aqua, fontWeight: "700" },
+  packButtonTextActive: { color: "#2a1a0a" },
   primaryButton: { marginTop: 20 },
   secondaryButton: { marginTop: 12 },
-  divider: { height: 1, backgroundColor: "rgba(201,162,75,0.2)", marginVertical: 24 },
-  error: { color: "#ffb4b4", marginTop: 12, textAlign: "center" },
-  footnote: { color: "#93a99c", fontSize: 12, textAlign: "center", marginTop: 32 },
+  divider: { height: 1, backgroundColor: colors.aquaDim, marginVertical: 24 },
+  error: { color: colors.negative, marginTop: 12, textAlign: "center" },
+  footnote: { color: colors.textMuted, fontSize: 12, textAlign: "center", marginTop: 32 },
 });
