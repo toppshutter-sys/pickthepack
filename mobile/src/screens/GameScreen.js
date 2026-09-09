@@ -7,7 +7,7 @@ import GradientButton from "../components/GradientButton";
 import GlassPanel from "../components/GlassPanel";
 import InviteButton from "../components/InviteButton";
 import { emitWithAck } from "../socket";
-import { centeredContent } from "../responsive";
+import { centeredContent, useScale } from "../responsive";
 import { confirmAsync } from "../confirm";
 import { shareInvite } from "../inviteLink";
 import { colors, gradients } from "../theme";
@@ -16,6 +16,33 @@ function isFlipTurn(round, isInstantWin, isRoundOver, playerIndex) {
   const placementPending =
     round.pendingPlacement !== null && round.pendingPlacement !== undefined;
   return !isInstantWin && !isRoundOver && !placementPending && round.turnIndex === playerIndex;
+}
+
+// Seats opponents along the top arc of an oval table (you sit at the
+// bottom, implicitly, via the "Your hand" block below the table surface).
+// Horizontal position is a plain even spread by seat index — simple and
+// predictable. Vertical position is a shallow "dome": highest (smallest
+// top%) at dead center, easing down toward TOP_SIDE at the outer seats —
+// capped there deliberately (an ellipse's sin() would let outer seats sink
+// toward the container's vertical center regardless of how shallow the
+// curve is meant to be, which let them dip down into the felt table below
+// once the horizontal spread widened for more opponents).
+function seatPosition(seatIndex, seatCount) {
+  const t = seatCount === 1 ? 0.5 : seatIndex / (seatCount - 1);
+  // Fewer opponents sit closer together and higher up — spread wide/low
+  // only kicks in once there are enough seats that they'd otherwise
+  // collide. Without this, exactly 2 opponents end up stuck flush in the
+  // far corners with a big empty gap between them, barely reading as an
+  // arc at all.
+  const LEFT_MARGIN = seatCount <= 2 ? 28 : seatCount === 3 ? 18 : 10; // %
+  const TOP_SIDE = seatCount <= 2 ? 14 : seatCount === 3 ? 20 : 28; // % — hard ceiling, however wide the spread gets
+  const TOP_CENTER = 4; // %
+  const left = seatCount === 1 ? 50 : LEFT_MARGIN + (100 - 2 * LEFT_MARGIN) * t;
+  const top = TOP_CENTER + (TOP_SIDE - TOP_CENTER) * Math.pow(Math.abs(2 * t - 1), 1.4);
+  return {
+    left: `${left}%`,
+    top: `${top}%`,
+  };
 }
 
 const CATEGORY_LABEL = {
@@ -57,12 +84,15 @@ function NetPill({ player, size = "small" }) {
   const n = netFor(player);
   return (
     <GlassPanel
-      style={[styles.netPill, size === "large" && styles.netPillLarge]}
+      style={[styles.netPill, size === "large" && styles.netPillLarge, size === "tiny" && styles.netPillTiny]}
       radius={999}
       borderColor={netPillBorderColor(n)}
     >
-      <Text style={[styles.netPillText, size === "large" && styles.netPillTextLarge, netTextStyle(n)]}>
-        Net {formatNet(n)}
+      <Text
+        style={[styles.netPillText, size === "large" && styles.netPillTextLarge, size === "tiny" && styles.netPillTextTiny, netTextStyle(n)]}
+        numberOfLines={1}
+      >
+        {size === "tiny" ? formatNet(n) : `Net ${formatNet(n)}`}
       </Text>
     </GlassPanel>
   );
@@ -85,6 +115,7 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
   const [now, setNow] = useState(Date.now());
 
   const { round, players, you, potAmount, packAmount } = roomState;
+  const scale = useScale();
 
   const roundIsLive = roomState.status === "round-active";
   useEffect(() => {
@@ -296,6 +327,14 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
     ? new Set([round.winnerIndex])
     : new Set();
   const isSplit = winnerSet.size > 1;
+  const opponents = players.map((p, i) => ({ p, i })).filter((o) => o.i !== you);
+  // Narrower per seat as more opponents crowd the arc, so up to 5 still
+  // fit around the oval without piling on top of each other.
+  const seatWidth = Math.round((opponents.length >= 5 ? 58 : opponents.length >= 4 ? 66 : opponents.length >= 3 ? 76 : 84) * scale);
+  // Matches seatPosition's TOP_SIDE tiers plus room for a seat's content
+  // (name + net pill + fanned hand) — fewer opponents sit higher, so they
+  // don't need as tall a container.
+  const ovalHeight = Math.round((opponents.length <= 2 ? 112 : opponents.length === 3 ? 128 : opponents.length === 4 ? 142 : 152) * scale);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -323,26 +362,29 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
         />
       )}
 
-      <View style={styles.opponents}>
-        {players.map((p, i) =>
-          i === you ? null : (
-            <View key={i} style={styles.opponentBlock}>
-              <Text
-                style={[
-                  styles.opponentName,
-                  (isFlipTurn(round, isInstantWin, isRoundOver, i) || round.pendingPlacement === i) && styles.activeName,
-                ]}
-              >
-                {p.name}
-                {isFlipTurn(round, isInstantWin, isRoundOver, i) ? " (flip turn)" : ""}
-                {round.pendingPlacement === i ? " (placing…)" : ""}
-                {winnerSet.has(i) ? " 🏆" : ""}
-              </Text>
-              <NetPill player={p} />
-              <Hand cards={round.hands[i] || []} size="small" />
-            </View>
-          )
-        )}
+      {/* Opponents seated around the top arc of an oval table — you sit at
+          the bottom (see "Your hand" below the table surface). */}
+      <View style={[styles.tableOval, { height: ovalHeight }]}>
+        {opponents.map(({ p, i }, seatIdx) => (
+          <View key={i} style={[styles.seat, { width: seatWidth, marginLeft: -seatWidth / 2 }, seatPosition(seatIdx, opponents.length)]}>
+            {/* Whose flip-turn/placing it is reads from the gold name color
+                alone here — a text suffix doesn't fit once seats get tight
+                with 4-5 opponents; the recast screen's player list still
+                spells it out in full since it has room to. */}
+            <Text
+              style={[
+                styles.opponentName,
+                (isFlipTurn(round, isInstantWin, isRoundOver, i) || round.pendingPlacement === i) && styles.activeName,
+              ]}
+              numberOfLines={1}
+            >
+              {p.name}
+              {winnerSet.has(i) ? " 🏆" : ""}
+            </Text>
+            <NetPill player={p} size="tiny" />
+            <Hand cards={round.hands[i] || []} size="small" fan dealFrom="below" maxWidth={seatWidth} />
+          </View>
+        ))}
       </View>
 
       {!isInstantWin && !isRoundOver && round.lastKnock && (
@@ -417,6 +459,7 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
           cards={round.hands[you] || []}
           onCardPress={isMyPendingPlacement ? placeCard : selectingMatch ? tapCard : undefined}
           disabled={busy}
+          dealFrom="above"
         />
       </View>
 
@@ -535,14 +578,19 @@ const styles = StyleSheet.create({
   recastPending: { color: colors.textMuted, fontSize: 13 },
   netPill: { paddingHorizontal: 10, paddingVertical: 3, marginTop: 3, marginBottom: 6 },
   netPillLarge: { paddingHorizontal: 14, paddingVertical: 5, marginBottom: 10 },
+  netPillTiny: { paddingHorizontal: 6, paddingVertical: 1, marginTop: 1, marginBottom: 3 },
   netPillText: { fontSize: 11, fontWeight: "700" },
   netPillTextLarge: { fontSize: 13.5 },
+  netPillTextTiny: { fontSize: 9 },
   netTextPositive: { color: colors.positive },
   netTextNegative: { color: colors.negative },
   netTextZero: { color: colors.textMuted },
-  opponents: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", marginBottom: 20 },
-  opponentBlock: { alignItems: "center", marginHorizontal: 10, marginBottom: 10 },
-  opponentName: { color: colors.textPrimary, marginBottom: 4, fontSize: 13 },
+  // The oval opponents sit around — position:relative so each seat's
+  // position:absolute + percentage left/top resolves against ITS bounds,
+  // not the whole screen.
+  tableOval: { width: "100%", position: "relative", marginBottom: 10 },
+  seat: { position: "absolute", alignItems: "center" },
+  opponentName: { color: colors.textPrimary, marginBottom: 4, fontSize: 12 },
   activeName: { color: colors.sunGold, fontWeight: "700" },
   tableSurface: {
     width: "100%",

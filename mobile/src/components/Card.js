@@ -26,8 +26,16 @@ const GOLD_BRIGHT = colors.sunGold;
  * while you're selecting a match or placing a target). `selected` draws a
  * brighter, faster pulse for "this is the one you've picked." `index`
  * staggers the entrance animation when a whole hand renders at once.
+ *
+ * `dealFrom` — "below" or "above" — makes the entrance read as a card
+ * being dealt IN from that direction (a slide + slight rotation, settling
+ * into place) instead of the default gentle upward pop. `cardStyle` merges
+ * into the card face/back's own style (overriding its default
+ * marginHorizontal) — used by Hand's `fan` mode to overlap cards; a plain
+ * outer `style` wouldn't work for this since the card's margin is what
+ * inflates its effective footprint in the row, not the wrapper's own.
  */
-export default function Card({ card, size = "normal", onPress, disabled, tappable, selected, index = 0 }) {
+export default function Card({ card, size = "normal", onPress, disabled, tappable, selected, index = 0, dealFrom, cardStyle }) {
   const scale = useScale();
   const baseWidth = size === "small" ? 44 : 64;
   const baseHeight = size === "small" ? 62 : 90;
@@ -38,8 +46,8 @@ export default function Card({ card, size = "normal", onPress, disabled, tappabl
   const cornerSuitFontSize = Math.round((size === "small" ? 7 : 9.5) * scale);
   const isRed = card && RED_SUITS.has(card.suit);
 
-  // Entrance: a quick pop-and-settle, staggered by `index` so a hand deals
-  // in one card after another instead of all snapping in at once.
+  // Entrance: a smooth slide-and-settle, staggered by `index` so a hand
+  // deals in one card after another instead of all snapping in at once.
   const entrance = useRef(new Animated.Value(0)).current;
   // Re-key the entrance animation to the card's identity (or "back" for a
   // hidden card) so a genuinely new card in this slot re-plays the pop,
@@ -53,9 +61,9 @@ export default function Card({ card, size = "normal", onPress, disabled, tappabl
     }
     const anim = Animated.timing(entrance, {
       toValue: 1,
-      duration: 260,
-      delay: Math.min(index, 8) * 55,
-      easing: Easing.out(Easing.back(1.6)),
+      duration: 340,
+      delay: Math.min(index, 8) * 75,
+      easing: Easing.out(Easing.back(1.25)),
       useNativeDriver: true,
     });
     anim.start();
@@ -95,16 +103,24 @@ export default function Card({ card, size = "normal", onPress, disabled, tappabl
   const glowShadowOpacity = glow.interpolate({ inputRange: [0, 1], outputRange: [selected ? 0.45 : 0.18, selected ? 0.9 : 0.55] });
   const glowRadius = glow.interpolate({ inputRange: [0, 1], outputRange: [selected ? 6 : 3, selected ? 14 : 8] });
 
+  // Directional dealing: "below" (opponent seats, above the table surface —
+  // their cards rise up into place) and "above" (your own hand, below the
+  // table surface — cards drop down into place) each start further out and
+  // gently rotated, settling flat as they land, like an actual card being
+  // dealt rather than just fading up in place.
+  const dealDy = dealFrom === "below" ? 30 : dealFrom === "above" ? -34 : 8;
+  const dealRotate = dealFrom === "below" ? "-6deg" : dealFrom === "above" ? "6deg" : "0deg";
   const entranceStyle = {
     opacity: entrance,
     transform: [
       { scale: entrance.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1] }) },
-      { translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) },
+      { translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [dealDy, 0] }) },
+      { rotate: entrance.interpolate({ inputRange: [0, 1], outputRange: [dealRotate, "0deg"] }) },
     ],
   };
 
   const face = !card ? (
-    <LinearGradient colors={gradients.cardBack} start={{ x: 0.15, y: 0 }} end={{ x: 0.9, y: 1 }} style={[styles.card, dims, styles.back]}>
+    <LinearGradient colors={gradients.cardBack} start={{ x: 0.15, y: 0 }} end={{ x: 0.9, y: 1 }} style={[styles.card, dims, styles.back, cardStyle]}>
       {/* Sun-over-waves medallion — built from plain shapes (no icon/SVG
           library in the project) rather than an emoji glyph, which renders
           inconsistently across platforms and turns to mush at this size. */}
@@ -115,7 +131,7 @@ export default function Card({ card, size = "normal", onPress, disabled, tappabl
       </View>
     </LinearGradient>
   ) : (
-    <LinearGradient colors={["#fffdf7", "#f2ecdd"]} start={{ x: 0.2, y: 0 }} end={{ x: 0.85, y: 1 }} style={[styles.card, dims, styles.face]}>
+    <LinearGradient colors={["#fffdf7", "#f2ecdd"]} start={{ x: 0.2, y: 0 }} end={{ x: 0.85, y: 1 }} style={[styles.card, dims, styles.face, cardStyle]}>
       {/* Thin printed-border inset — real card stock has a rule line
           framing the design a few mm in from the trimmed edge. */}
       <View style={styles.printBorder} pointerEvents="none" />
