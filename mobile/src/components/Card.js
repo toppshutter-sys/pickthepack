@@ -34,7 +34,6 @@ export default function Card({ card, size = "normal", onPress, disabled, tappabl
   const dims = { width: Math.round(baseWidth * scale), height: Math.round(baseHeight * scale) };
   const rankFontSize = Math.round((size === "small" ? 14 : 20) * scale);
   const suitFontSize = Math.round((size === "small" ? 13 : 19) * scale);
-  const emblemFontSize = Math.round(18 * scale);
   const isRed = card && RED_SUITS.has(card.suit);
 
   // Entrance: a quick pop-and-settle, staggered by `index` so a hand deals
@@ -104,8 +103,13 @@ export default function Card({ card, size = "normal", onPress, disabled, tappabl
 
   const face = !card ? (
     <LinearGradient colors={gradients.cardBack} start={{ x: 0.15, y: 0 }} end={{ x: 0.9, y: 1 }} style={[styles.card, dims, styles.back]}>
+      {/* Sun-over-waves medallion — built from plain shapes (no icon/SVG
+          library in the project) rather than an emoji glyph, which renders
+          inconsistently across platforms and turns to mush at this size. */}
       <View style={styles.backEmblem}>
-        <Text style={[styles.backEmblemText, { fontSize: emblemFontSize }]}>♠</Text>
+        <View style={styles.backSun} />
+        <View style={styles.backWaveBack} />
+        <View style={styles.backWaveFront} />
       </View>
     </LinearGradient>
   ) : (
@@ -163,15 +167,45 @@ const styles = StyleSheet.create({
   face: {},
   back: { borderWidth: 1, borderColor: colors.aquaDim },
   backEmblem: {
-    width: "58%",
-    height: "58%",
-    borderRadius: 5,
+    width: "60%",
+    aspectRatio: 1,
+    borderRadius: 999,
     borderWidth: 1.5,
     borderColor: colors.aquaDim,
+    overflow: "hidden",
     alignItems: "center",
-    justifyContent: "center",
   },
-  backEmblemText: { color: "rgba(94,231,208,0.85)", fontWeight: "800" },
+  backSun: {
+    position: "absolute",
+    top: "16%",
+    width: "36%",
+    aspectRatio: 1,
+    borderRadius: 999,
+    backgroundColor: colors.sunGold,
+  },
+  // Two oversized circles, each pushed almost entirely below the
+  // medallion's bottom edge so only a thin sliver of their top arc peeks
+  // in — the classic no-SVG trick for a curved "wave crest" line out of a
+  // plain View. `bottom` here is deliberately NOT close to 0: for a circle
+  // `width`% wide/tall, keeping only the top `visible`% of it inside the
+  // container means bottom = -(width% - visible%) — e.g. a 160%-wide circle
+  // showing a 26%-tall sliver needs bottom: -134%, not -38%.
+  backWaveBack: {
+    position: "absolute",
+    bottom: "-134%",
+    width: "160%",
+    aspectRatio: 1,
+    borderRadius: 999,
+    backgroundColor: "rgba(94,231,208,0.32)",
+  },
+  backWaveFront: {
+    position: "absolute",
+    bottom: "-166%",
+    width: "180%",
+    aspectRatio: 1,
+    borderRadius: 999,
+    backgroundColor: "rgba(6,47,44,0.6)",
+  },
   rank: { fontWeight: "800" },
   suit: {},
   red: { color: "#d9463c" },
