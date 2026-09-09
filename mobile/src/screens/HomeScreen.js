@@ -13,6 +13,7 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getSocket, emitWithAck } from "../socket";
 import GradientButton from "../components/GradientButton";
+import Logo from "../components/Logo";
 import { centeredContent } from "../responsive";
 import { colors } from "../theme";
 
@@ -108,9 +109,9 @@ export default function HomeScreen({ onEnterRoom }) {
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView contentContainerStyle={styles.container}>
-        <Animated.View style={{ opacity: fadeIn, transform: [{ translateY: fadeIn.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }] }}>
-          <View style={styles.titleBadge}>
-            <Text style={styles.titleBadgeText}>A♠</Text>
+        <Animated.View style={{ opacity: fadeIn, alignItems: "center", transform: [{ translateY: fadeIn.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }] }}>
+          <View style={styles.logoWrap}>
+            <Logo size={92} />
           </View>
           <Text style={styles.title}>Pick the Pack</Text>
           <Text style={styles.subtitle}>Choose your pack, join the table.</Text>
@@ -222,12 +223,7 @@ function waitForConnect(socket) {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   container: { ...centeredContent, padding: 24, paddingTop: 64, paddingBottom: 48 },
-  titleBadge: {
-    alignSelf: "center", width: 46, height: 54, borderRadius: 12, backgroundColor: "#fdf6e8",
-    alignItems: "center", justifyContent: "center", marginBottom: 10,
-    shadowColor: colors.sunCoral, shadowOpacity: 0.4, shadowOffset: { width: 0, height: 4 }, shadowRadius: 10, elevation: 4,
-  },
-  titleBadgeText: { color: "#1a1a1a", fontWeight: "800", fontSize: 20 },
+  logoWrap: { marginBottom: 14 },
   title: { fontSize: 32, fontWeight: "800", color: colors.sunGold, textAlign: "center", letterSpacing: 0.3, textShadowColor: "rgba(245,167,90,0.45)", textShadowRadius: 14, textShadowOffset: { width: 0, height: 0 } },
   subtitle: { fontSize: 14, color: colors.textSecondary, textAlign: "center", marginBottom: 24 },
   label: { color: colors.textPrimary, marginTop: 12, marginBottom: 4, fontWeight: "600" },
