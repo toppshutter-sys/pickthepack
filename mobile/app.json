@@ -14,15 +14,15 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#0b3d2e"
+        "backgroundColor": "#04201e"
       }
     },
     "web": {
       "bundler": "metro",
       "name": "Pick the Pack",
       "shortName": "Pick the Pack",
-      "themeColor": "#0b3d2e",
-      "backgroundColor": "#0b3d2e",
+      "themeColor": "#0e6e68",
+      "backgroundColor": "#04201e",
       "display": "standalone",
       "orientation": "portrait",
       "lang": "en",
@@ -45,7 +45,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#0b3d2e"
+          "backgroundColor": "#04201e"
         }
       ]
     ]
