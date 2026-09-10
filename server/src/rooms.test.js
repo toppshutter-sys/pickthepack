@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { RoomManager, FLIP_COOLDOWN_MS } = require("./rooms");
+const { RoomManager, FLIP_COOLDOWN_MS, KNOCK_COOLDOWN_MS } = require("./rooms");
 const { findMandatoryKnock } = require("./gameEngine");
 
 function seatRoom(names) {
@@ -408,23 +408,35 @@ test("tapDeck: a second flip right after a successful one is rejected again", ()
   assert.throws(() => rooms.tapDeck(room.code, nextTurnSocketId), /moment to look/);
 });
 
-test("tapDeck: knocking (matching) is not subject to the flip cooldown", () => {
+test("tapCard: knocking is independent of the flip cooldown (lastFlipAt) — only its own knock cooldown applies", () => {
   const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
   const r = forceRoundActive(rooms, room);
-  // Cooldown is fresh (round just started) — a knock attempt should still
-  // be evaluated by the engine rather than being blocked outright. Pick a
+  // lastFlipAt is fresh (round just started) — knocking should be entirely
+  // unaffected by it. Backdate ONLY lastTargetAt (the knock cooldown's own
+  // baseline, tested separately below) so this test isolates "the flip
+  // cooldown doesn't gate knocking" from the knock cooldown itself. Pick a
   // card whose rank is guaranteed not to match the target (a random card
   // from the hand could legitimately match and knock successfully, which
   // would make this assertion flaky) so we can confirm we get the engine's
-  // own "no match" style error, not the cooldown error.
+  // own "no match" style error, not either cooldown's error.
+  room.lastTargetAt = Date.now() - (KNOCK_COOLDOWN_MS + 100);
   const nonTurnPlayerIdx = (r.round.turnIndex + 1) % 3;
   const targetRank = r.round.faceUpCard.rank;
   const nonMatchingCard = r.round.hands[nonTurnPlayerIdx].find((c) => c.rank !== targetRank);
   assert.ok(nonMatchingCard, "expected at least one non-matching card in the test hand");
   assert.throws(
     () => rooms.tapCard(room.code, `s${nonTurnPlayerIdx}`, nonMatchingCard.id, r.round.faceUpCard.id),
-    (err) => !/moment to look/.test(err.message)
+    (err) => !/moment to look/.test(err.message) && !/moment to see/.test(err.message)
   );
+});
+
+test("tapDeck: flipping is independent of the knock cooldown (lastTargetAt) — only its own flip cooldown applies", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  const r = forceRoundActive(rooms, room);
+  // lastTargetAt is fresh (round just started) — flipping should be
+  // entirely unaffected by it, only by lastFlipAt (backdated here).
+  room.lastFlipAt = Date.now() - (FLIP_COOLDOWN_MS + 100);
+  assert.doesNotThrow(() => rooms.tapDeck(room.code, `s${r.round.turnIndex}`));
 });
 
 test("toPlayerState: exposes flipAvailableAt derived from lastFlipAt", () => {
@@ -434,6 +446,13 @@ test("toPlayerState: exposes flipAvailableAt derived from lastFlipAt", () => {
   assert.equal(state.round.flipAvailableAt, room.lastFlipAt + FLIP_COOLDOWN_MS);
 });
 
+test("toPlayerState: exposes knockAvailableAt derived from lastTargetAt", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  forceRoundActive(rooms, room);
+  const state = rooms.toPlayerState(room, "s0");
+  assert.equal(state.round.knockAvailableAt, room.lastTargetAt + KNOCK_COOLDOWN_MS);
+});
+
 test("startRound: resets the flip cooldown baseline when the Matching Phase begins", () => {
   const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
   forceRoundActive(rooms, room);
@@ -441,4 +460,73 @@ test("startRound: resets the flip cooldown baseline when the Matching Phase begi
   const before = Date.now();
   forceRoundActive(rooms, room); // re-deals until Matching Phase begins again
   assert.ok(room.lastFlipAt >= before);
+});
+
+test("startRound: resets the knock cooldown baseline when the Matching Phase begins", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  forceRoundActive(rooms, room);
+  room.lastTargetAt = 0; // simulate a stale baseline from a prior round
+  const before = Date.now();
+  forceRoundActive(rooms, room);
+  assert.ok(room.lastTargetAt >= before);
+});
+
+/**
+ * Re-deals until the round lands in the Matching Phase AND at least one
+ * player (any seat, regardless of turn) holds a genuine mandatory match
+ * against the target — the knock cooldown tests need a real matching card
+ * to knock, not just any card, to isolate the cooldown from the engine's
+ * own "doesn't match" rejection.
+ */
+function forceRoundActiveWithMatch(rooms, room) {
+  let r;
+  let matchInfo;
+  do {
+    r = rooms.startRound(room.code);
+    matchInfo = undefined;
+    if (r.status === "round-active") {
+      const targetRank = r.round.faceUpCard.rank;
+      for (let i = 0; i < r.round.hands.length; i++) {
+        const m = findMandatoryKnock(r.round.hands[i], targetRank);
+        if (m) {
+          matchInfo = { playerIdx: i, card: m };
+          break;
+        }
+      }
+    }
+  } while (r.status !== "round-active" || !matchInfo);
+  return { r, matchInfo };
+}
+
+test("tapCard: rejected when attempted before the knock cooldown has elapsed", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  const { matchInfo } = forceRoundActiveWithMatch(rooms, room);
+  // lastTargetAt is fresh (round just started) — even a genuinely matching
+  // card should be turned away by the cooldown, not accepted.
+  assert.throws(
+    () => rooms.tapCard(room.code, `s${matchInfo.playerIdx}`, matchInfo.card.id, null),
+    /moment to see/
+  );
+});
+
+test("tapCard: succeeds once the knock cooldown has elapsed", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  const { matchInfo } = forceRoundActiveWithMatch(rooms, room);
+  room.lastTargetAt = Date.now() - (KNOCK_COOLDOWN_MS + 100);
+  assert.doesNotThrow(() => rooms.tapCard(room.code, `s${matchInfo.playerIdx}`, matchInfo.card.id, null));
+});
+
+test("tapCard: a pending placement is reported as such, not misreported as the knock cooldown", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  const { matchInfo } = forceRoundActiveWithMatch(rooms, room);
+  room.lastTargetAt = Date.now() - (KNOCK_COOLDOWN_MS + 100);
+  const after = rooms.tapCard(room.code, `s${matchInfo.playerIdx}`, matchInfo.card.id, null);
+  if (after.round.pendingPlacement === null || after.round.pendingPlacement === undefined) {
+    return; // this particular knock didn't leave a placement pending — nothing to check here
+  }
+  const anotherPlayerIdx = (matchInfo.playerIdx + 1) % 3;
+  assert.throws(
+    () => rooms.tapCard(room.code, `s${anotherPlayerIdx}`, "does-not-matter", null),
+    /Waiting for a new target card to be placed/
+  );
 });

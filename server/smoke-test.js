@@ -210,11 +210,14 @@ async function playOneRound(alice, bob, code, packAmount, rooms) {
       }
     }
 
-    // This loop drives many flips back-to-back to exercise game logic as
-    // fast as possible — bypass the real 1s inter-flip cooldown (covered by
-    // its own dedicated tests in rooms.test.js) so the smoke test isn't
-    // dominated by real-time waits unrelated to what it's checking.
-    rooms.rooms.get(code).lastFlipAt = 0;
+    // This loop drives many flips/knocks back-to-back to exercise game
+    // logic as fast as possible — bypass the real 1s inter-flip and
+    // inter-knock cooldowns (each covered by its own dedicated tests in
+    // rooms.test.js) so the smoke test isn't dominated by real-time waits
+    // unrelated to what it's checking.
+    const liveRoom = rooms.rooms.get(code);
+    liveRoom.lastFlipAt = 0;
+    liveRoom.lastTargetAt = 0;
 
     const p1 = new Promise((r) => alice.once("room-state", r));
     const p2 = new Promise((r) => bob.once("room-state", r));

@@ -317,6 +317,13 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
   // flip-turn player's.
   const flipCooldownRemainingMs = round.flipAvailableAt ? Math.max(0, round.flipAvailableAt - now) : 0;
   const flipOnCooldown = flipCooldownRemainingMs > 0;
+  // Same idea, but for knocking: a brief window after any new target card
+  // appears (flip, deck-refill, or a placed target) before the first knock
+  // on it is accepted, so the fastest tapper can't claim it before everyone
+  // else has even seen it. knockAvailableAt is a shared server timestamp,
+  // so every player's screen shows the same countdown.
+  const knockCooldownRemainingMs = round.knockAvailableAt ? Math.max(0, round.knockAvailableAt - now) : 0;
+  const knockOnCooldown = knockCooldownRemainingMs > 0;
 
   // The table layout (deck, target card, everyone's hand) is ALWAYS shown,
   // regardless of how the round resolves — an instant win just adds a
@@ -421,9 +428,9 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
               <Card
                 card={round.faceUpCard}
                 onPress={tapTargetCard}
-                tappable={!isInstantWin && !isRoundOver}
+                tappable={!isInstantWin && !isRoundOver && !knockOnCooldown}
                 selected={selectingMatch}
-                disabled={isInstantWin || isRoundOver || busy}
+                disabled={isInstantWin || isRoundOver || busy || knockOnCooldown}
               />
             ) : (
               <View style={styles.emptyPileSlot}>
@@ -432,7 +439,13 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
             )}
             <Text style={styles.pileCount}>{round.tablePileCount} retired</Text>
             {!isInstantWin && !isRoundOver && round.faceUpCard ? (
-              <Text style={styles.tapHint}>{selectingMatch ? "tap again to cancel" : "tap if you have a match"}</Text>
+              <Text style={styles.tapHint}>
+                {knockOnCooldown
+                  ? `wait ${Math.ceil(knockCooldownRemainingMs / 1000)}s…`
+                  : selectingMatch
+                  ? "tap again to cancel"
+                  : "tap if you have a match"}
+              </Text>
             ) : null}
           </View>
         </View>
@@ -452,6 +465,8 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
               ? "Now tap the card in your hand that matches"
               : placementPending
               ? `Waiting for ${players[pendingPlacement].name} to place a new target card`
+              : knockOnCooldown
+              ? "Give everyone a moment to look before matching opens up"
               : "Tap the target card any time you think you have a match"}
           </Text>
         ) : null}

@@ -15,9 +15,16 @@ const engine = require("./gameEngine");
 
 // Minimum time between deck flips, enforced globally per room (not just per
 // player) — so cards can't be rapid-fired through, and everyone gets a
-// moment to actually see one before the next is allowed. Knocking (racing
-// to match) is deliberately NOT subject to this — only flipping.
+// moment to actually see one before the next is allowed.
 const FLIP_COOLDOWN_MS = 1000;
+
+// Minimum time after a target card first appears (from a flip, a knock's
+// deck-refill, or a placed target) before ANY knock on it is accepted —
+// enforced globally per room, not per player, so the fastest tapper can't
+// claim a card before everyone else has even had a chance to see it. Once
+// this passes, matching goes back to being a genuine free-for-all — first
+// valid tap wins, same as before.
+const KNOCK_COOLDOWN_MS = 1000;
 
 function makeRoomCode() {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I ambiguity
@@ -60,6 +67,7 @@ class RoomManager {
       log: [],
       lastKnock: null, // { playerIdx, card } — the most recent knock this round, for the client's knock indicator
       lastFlipAt: 0, // timestamp of the most recent successful deck flip — see FLIP_COOLDOWN_MS
+      lastTargetAt: 0, // timestamp the current target card first appeared — see KNOCK_COOLDOWN_MS
     };
     this.rooms.set(code, room);
     return room;
@@ -304,10 +312,11 @@ class RoomManager {
 
     // matching
     room.status = "round-active";
-    // Starts the flip cooldown from the moment the Matching Phase begins,
-    // not just from the first flip — so nobody can flip again the instant
-    // the round starts, before everyone's even seen their own hand.
+    // Starts both cooldowns from the moment the Matching Phase begins, not
+    // just from the first flip/knock — so nobody can act on the opening
+    // target instantly, before everyone's even seen their own hand.
     room.lastFlipAt = Date.now();
+    room.lastTargetAt = Date.now();
     this.addLog(
       room,
       `Deal complete — no instant win. Target card: ${result.faceUpCard.rank} of ${result.faceUpCard.suit}. Matching Phase begins.`
@@ -347,21 +356,26 @@ class RoomManager {
       room.dealerIndex = after.winnerIndex;
       room.potAmount = 0;
     } else if (after.action && after.action.type === "knock-awaiting-placement") {
+      // No new target card yet — faceUpCard is null until placeTarget is
+      // called, so there's nothing here for the knock cooldown to time.
       this.addLog(
         room,
         `${actingPlayer.name} tapped a matching ${after.action.card.rank} to knock it in and is choosing a new target card from their hand.`
       );
     } else if (after.action && after.action.type === "knock-deck-refill") {
+      room.lastTargetAt = Date.now();
       this.addLog(
         room,
         `${actingPlayer.name} tapped a matching ${after.action.card.rank} to knock it in — with one card left, the deck flipped a new target: ${after.faceUpCard.rank} of ${after.faceUpCard.suit}.`
       );
     } else if (after.action && after.action.type === "place-target") {
+      room.lastTargetAt = Date.now();
       this.addLog(
         room,
         `${actingPlayer.name} placed ${after.faceUpCard.rank} of ${after.faceUpCard.suit} face-up as the new target card.`
       );
     } else {
+      room.lastTargetAt = Date.now();
       this.addLog(room, `${actingPlayer.name} had no match, tapped the deck, and flipped ${after.faceUpCard.rank} of ${after.faceUpCard.suit}.`);
     }
     return room;
@@ -370,12 +384,26 @@ class RoomManager {
   /**
    * Player taps a specific card in their own hand, asserting it matches the
    * target — allowed at any moment, for any seated player, regardless of
-   * whose flip-turn it is. `expectedTargetId` (the target card's id the
-   * client last saw) is optional but lets the engine give a friendlier
-   * "someone already matched that" message if this tap lost a race.
+   * whose flip-turn it is, though only once KNOCK_COOLDOWN_MS has passed
+   * since the current target first appeared (enforced globally per room,
+   * not per player) — so the fastest tapper can't claim a card before
+   * everyone else has had a chance to actually see it. `expectedTargetId`
+   * (the target card's id the client last saw) is optional but lets the
+   * engine give a friendlier "someone already matched that" message if
+   * this tap lost a race.
    */
   tapCard(code, socketId, cardId, expectedTargetId) {
     const { room, playerIdx, player } = this._validateActivePlayer(code, socketId);
+    // Checked before the cooldown, same reasoning as tapDeck's turn-order
+    // check: there's genuinely nothing to knock yet while a placement is
+    // pending, so that should never be misreported as "too soon."
+    if (room.round.pendingPlacement !== null && room.round.pendingPlacement !== undefined) {
+      throw new Error("Waiting for a new target card to be placed — try again in a moment");
+    }
+    const elapsed = Date.now() - room.lastTargetAt;
+    if (elapsed < KNOCK_COOLDOWN_MS) {
+      throw new Error("Give everyone a moment to see the card — try again in a second.");
+    }
     const after = engine.attemptKnock(room.round, playerIdx, cardId, expectedTargetId);
     return this._applyTurnResult(room, player, after);
   }
@@ -460,10 +488,11 @@ class RoomManager {
               : null,
             wonAmount: room.round.wonAmount ?? null,
             recastReady: room.recastReady ? room.players.map((p) => room.recastReady.has(p.id)) : null,
-            // Client-side timestamp (not a duration) so a clock-drift- and
-            // latency-tolerant countdown can be shown — the server remains
-            // the actual authority via tapDeck's own cooldown check.
+            // Client-side timestamps (not durations) so clock-drift- and
+            // latency-tolerant countdowns can be shown — the server remains
+            // the actual authority via tapDeck/tapCard's own cooldown checks.
             flipAvailableAt: room.lastFlipAt + FLIP_COOLDOWN_MS,
+            knockAvailableAt: room.lastTargetAt + KNOCK_COOLDOWN_MS,
           }
         : null,
       log: room.log.slice(-20),
@@ -478,4 +507,4 @@ class RoomManager {
   }
 }
 
-module.exports = { RoomManager, makeRoomCode, FLIP_COOLDOWN_MS };
+module.exports = { RoomManager, makeRoomCode, FLIP_COOLDOWN_MS, KNOCK_COOLDOWN_MS };
