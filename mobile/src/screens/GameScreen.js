@@ -219,24 +219,32 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
   }, [round && round.lastKnock && round.lastKnock.card.id]);
 
   // Win — the moment a winner is first decided, covering both an instant
-  // win (dealt) and matching a whole hand out. Mirrors the winnerSet logic
-  // further down, computed here too since hooks can't follow that past
-  // the early returns below.
-  const hasWinner =
-    !!round &&
-    ((round.phase === "instant-win" && Array.isArray(round.winnerIndices) && round.winnerIndices.length > 0) ||
-      typeof round.winnerIndex === "number");
-  // Seeded from the actual mount-time value (not hardcoded false) so
-  // mounting straight into an already-decided round — e.g. reconnecting
-  // right as it ends — doesn't fire the sound for an outcome that already
-  // happened before this screen was showing.
-  const hadWinnerRef = useRef(hasWinner);
+  // win (dealt) and matching a whole hand out. Keyed off roomState.history
+  // growing (each entry there is one resolved round — see rooms.js) rather
+  // than a hasWinner boolean transitioning false-to-true: an instant win is
+  // resolved by the server in one synchronous step, so the client NEVER
+  // sees an intermediate "no winner yet" render for it — two instant wins
+  // in a row would leave a boolean permanently stuck at "true", and the
+  // second win's own false-to-true transition would simply never happen.
+  // history.length strictly increases by exactly one per genuine win no
+  // matter how it happened, so this catches every one of them correctly.
+  const historyLength = roomState.history ? roomState.history.length : 0;
+  // Deliberately seeded at 0, NOT the mount-time length: an instant win
+  // resolves before GameScreen ever renders a live round-active state, so
+  // if the very first round anyone plays happens to BE an instant win,
+  // mounting with the mount-time length would treat that genuinely new win
+  // as "already happened" and never sound it — a common, not-edge case.
+  // The tradeoff is a reconnect into a table with existing history plays
+  // one sound it technically shouldn't; a stray "ding" on the rare
+  // reconnect is a much smaller cost than silently missing every table's
+  // first-round win.
+  const lastHistoryLengthRef = useRef(0);
   useEffect(() => {
-    if (hasWinner && !hadWinnerRef.current) {
+    if (historyLength > lastHistoryLengthRef.current) {
       playSoundSafely(winSound);
     }
-    hadWinnerRef.current = hasWinner;
-  }, [hasWinner]);
+    lastHistoryLengthRef.current = historyLength;
+  }, [historyLength]);
 
   async function act(event, payload) {
     setError("");
