@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Animated, Easing } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import { useAudioPlayer } from "expo-audio";
 import Hand from "../components/Hand";
 import Card from "../components/Card";
 import GradientButton from "../components/GradientButton";
@@ -11,6 +12,20 @@ import { centeredContent, useScale } from "../responsive";
 import { confirmAsync } from "../confirm";
 import { shareInvite } from "../inviteLink";
 import { colors, gradients } from "../theme";
+
+// Restarts a short sound effect from the beginning and plays it — wrapped
+// defensively, same spirit as GradientButton's own
+// Haptics.impactAsync(...).catch(() => {}): a blocked/failed playback
+// (autoplay policy, a not-yet-loaded player, etc.) should never interrupt
+// gameplay.
+async function playSoundSafely(player) {
+  try {
+    await player.seekTo(0);
+    player.play();
+  } catch {
+    // ignore — sound is a nice-to-have, not load-bearing
+  }
+}
 
 function isFlipTurn(round, isInstantWin, isRoundOver, playerIndex) {
   const placementPending =
@@ -145,6 +160,82 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
     }
     lastPotAmount.current = potAmount;
   }, [potAmount]);
+
+  // Sound effects — preloaded once via useAudioPlayer (auto-disposed on
+  // unmount) rather than re-instantiated on every render. Kept subtle:
+  // this is a casual card game, not an arcade.
+  const flipSound = useAudioPlayer(require("../../assets/sounds/flip.wav"));
+  const knockSound = useAudioPlayer(require("../../assets/sounds/knock.wav"));
+  const winSound = useAudioPlayer(require("../../assets/sounds/win.wav"));
+  useEffect(() => {
+    flipSound.volume = 0.25;
+    knockSound.volume = 0.3;
+    winSound.volume = 0.35;
+  }, [flipSound, knockSound, winSound]);
+
+  // Card flip — only for a card actually drawn FROM THE DECK (a manual
+  // flip, or a knock's own "1 card left" auto-refill), not a placed
+  // target (chosen from the knocker's own hand, which never touches the
+  // deck). round.deckCount dropping is what tells the two apart — a
+  // placement leaves it unchanged. Tracked via a ref, reset whenever
+  // we're not in an active round, so the opening target of a fresh deal
+  // never fires this (it's a deal, not a flip) and neither does switching
+  // away from round-active and back.
+  const flipTrackRef = useRef({ faceUpId: null, deckCount: null });
+  useEffect(() => {
+    if (roomState.status !== "round-active" || !round) {
+      flipTrackRef.current = { faceUpId: null, deckCount: null };
+      return;
+    }
+    const faceUpId = round.faceUpCard ? round.faceUpCard.id : null;
+    const { faceUpId: prevFaceUpId, deckCount: prevDeckCount } = flipTrackRef.current;
+    if (
+      prevFaceUpId !== null &&
+      faceUpId !== null &&
+      faceUpId !== prevFaceUpId &&
+      prevDeckCount !== null &&
+      round.deckCount < prevDeckCount
+    ) {
+      playSoundSafely(flipSound);
+    }
+    flipTrackRef.current = { faceUpId, deckCount: round.deckCount };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomState.status, round && round.faceUpCard && round.faceUpCard.id, round && round.deckCount]);
+
+  // Knock — any successful match, by any player. round.lastKnock changing
+  // to a genuinely new card is the signal; the server resets it to null at
+  // the start of every round (see rooms.js), so a stale reference from a
+  // previous round is never mistaken for a fresh knock even though card
+  // ids (rank+suit only) recycle every deal.
+  const lastKnockCardIdRef = useRef(round && round.lastKnock ? round.lastKnock.card.id : null);
+  useEffect(() => {
+    const cardId = round && round.lastKnock ? round.lastKnock.card.id : null;
+    if (cardId !== null && cardId !== lastKnockCardIdRef.current) {
+      playSoundSafely(knockSound);
+    }
+    lastKnockCardIdRef.current = cardId;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [round && round.lastKnock && round.lastKnock.card.id]);
+
+  // Win — the moment a winner is first decided, covering both an instant
+  // win (dealt) and matching a whole hand out. Mirrors the winnerSet logic
+  // further down, computed here too since hooks can't follow that past
+  // the early returns below.
+  const hasWinner =
+    !!round &&
+    ((round.phase === "instant-win" && Array.isArray(round.winnerIndices) && round.winnerIndices.length > 0) ||
+      typeof round.winnerIndex === "number");
+  // Seeded from the actual mount-time value (not hardcoded false) so
+  // mounting straight into an already-decided round — e.g. reconnecting
+  // right as it ends — doesn't fire the sound for an outcome that already
+  // happened before this screen was showing.
+  const hadWinnerRef = useRef(hasWinner);
+  useEffect(() => {
+    if (hasWinner && !hadWinnerRef.current) {
+      playSoundSafely(winSound);
+    }
+    hadWinnerRef.current = hasWinner;
+  }, [hasWinner]);
 
   async function act(event, payload) {
     setError("");

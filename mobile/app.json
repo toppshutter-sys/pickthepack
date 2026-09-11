@@ -47,7 +47,8 @@
         {
           "backgroundColor": "#04201e"
         }
-      ]
+      ],
+      "expo-audio"
     ]
   }
 }
