@@ -363,7 +363,13 @@ class RoomManager {
         `${actingPlayer.name} tapped a matching ${after.action.card.rank} to knock it in and is choosing a new target card from their hand.`
       );
     } else if (after.action && after.action.type === "knock-deck-refill") {
+      // This DOES draw a real card from the deck (see _resolveKnock's
+      // 1-card-left branch) — reset the flip cooldown too, not just the
+      // knock cooldown, or tapDeck's own cooldown check stays anchored to
+      // whenever the last MANUAL flip happened and can pass instantly even
+      // though a card was just drawn moments ago.
       room.lastTargetAt = Date.now();
+      room.lastFlipAt = Date.now();
       this.addLog(
         room,
         `${actingPlayer.name} tapped a matching ${after.action.card.rank} to knock it in — with one card left, the deck flipped a new target: ${after.faceUpCard.rank} of ${after.faceUpCard.suit}.`
@@ -397,15 +403,33 @@ class RoomManager {
     // Checked before the cooldown, same reasoning as tapDeck's turn-order
     // check: there's genuinely nothing to knock yet while a placement is
     // pending, so that should never be misreported as "too soon."
+    this._checkNoPendingPlacement(room);
+    this._checkCooldown(room.lastTargetAt, KNOCK_COOLDOWN_MS, "Give everyone a moment to see the card — try again in a second.");
+    const after = engine.attemptKnock(room.round, playerIdx, cardId, expectedTargetId);
+    return this._applyTurnResult(room, player, after);
+  }
+
+  /**
+   * Shared guard: a placement pending on someone else means there's
+   * genuinely nothing to act on yet (no faceUpCard exists until placeTarget
+   * resolves it) — checked before either cooldown in both tapCard and
+   * tapDeck so this state is never misreported as "too soon," which would
+   * wrongly imply waiting it out is enough.
+   */
+  _checkNoPendingPlacement(room) {
     if (room.round.pendingPlacement !== null && room.round.pendingPlacement !== undefined) {
       throw new Error("Waiting for a new target card to be placed — try again in a moment");
     }
-    const elapsed = Date.now() - room.lastTargetAt;
-    if (elapsed < KNOCK_COOLDOWN_MS) {
-      throw new Error("Give everyone a moment to see the card — try again in a second.");
+  }
+
+  /** Shared cooldown-check pattern for tapCard/tapDeck — keeping the check
+   * itself in one place makes it harder for the two timers' reset
+   * contracts to drift out of sync as more actions are added. */
+  _checkCooldown(lastAt, cooldownMs, message) {
+    const elapsed = Date.now() - lastAt;
+    if (elapsed < cooldownMs) {
+      throw new Error(message);
     }
-    const after = engine.attemptKnock(room.round, playerIdx, cardId, expectedTargetId);
-    return this._applyTurnResult(room, player, after);
   }
 
   /**
@@ -413,20 +437,18 @@ class RoomManager {
    * may do this, and only once FLIP_COOLDOWN_MS has passed since the last
    * successful flip (enforced globally per room, not per player) — so
    * cards can't be rapid-fired through without anyone else getting a
-   * chance to actually see one and think. Turn ownership is checked before
-   * the cooldown so an out-of-turn tap always gets the turn-order message
-   * rather than being misreported as "too soon" (which would wrongly imply
-   * they'd be allowed to flip once the cooldown passes).
+   * chance to actually see one and think. Turn ownership and the pending-
+   * placement state are both checked before the cooldown so either one
+   * always gets its own accurate message rather than being misreported as
+   * "too soon" (which would wrongly imply waiting it out is enough).
    */
   tapDeck(code, socketId) {
     const { room, playerIdx, player } = this._validateActivePlayer(code, socketId);
     if (playerIdx !== room.round.turnIndex) {
       throw new Error("It's not your turn to flip yet — you can still tap a matching card at any time, though");
     }
-    const elapsed = Date.now() - room.lastFlipAt;
-    if (elapsed < FLIP_COOLDOWN_MS) {
-      throw new Error("Give everyone a moment to look — try again in a second.");
-    }
+    this._checkNoPendingPlacement(room);
+    this._checkCooldown(room.lastFlipAt, FLIP_COOLDOWN_MS, "Give everyone a moment to look — try again in a second.");
     const after = engine.flipFromDeck(room.round, playerIdx);
     room.lastFlipAt = Date.now();
     return this._applyTurnResult(room, player, after);

@@ -394,15 +394,10 @@ test("tapDeck: a second flip right after a successful one is rejected again", ()
   const r = forceRoundActive(rooms, room);
   room.lastFlipAt = Date.now() - (FLIP_COOLDOWN_MS + 100);
   const after = rooms.tapDeck(room.code, `s${r.round.turnIndex}`);
-  if (after.status !== "round-active") {
-    // Rare but legitimate: the flip's own auto-match chain (see the flip
-    // priority rule in gameEngine.js) cleared the flipper's whole hand and
-    // won the round outright on this single flip — there's no round left
-    // to flip in at all, an even stronger "can't flip again" than the
-    // cooldown, so the invariant this test cares about still holds.
-    assert.equal(after.status, "round-over");
-    return;
-  }
+  // A plain flip never auto-knocks or ends the round (flipping always
+  // opens the revealed card to the free-for-all — see gameEngine.js), so
+  // the round is always still active here.
+  assert.equal(after.status, "round-active");
   // Whoever's turn it is now (advanced by the flip) tries again immediately.
   const nextTurnSocketId = `s${after.round.turnIndex}`;
   assert.throws(() => rooms.tapDeck(room.code, nextTurnSocketId), /moment to look/);
@@ -529,4 +524,53 @@ test("tapCard: a pending placement is reported as such, not misreported as the k
     () => rooms.tapCard(room.code, `s${anotherPlayerIdx}`, "does-not-matter", null),
     /Waiting for a new target card to be placed/
   );
+});
+
+test("tapDeck: a pending placement is reported as such, not misreported as the flip cooldown", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  const { matchInfo } = forceRoundActiveWithMatch(rooms, room);
+  room.lastTargetAt = Date.now() - (KNOCK_COOLDOWN_MS + 100);
+  const after = rooms.tapCard(room.code, `s${matchInfo.playerIdx}`, matchInfo.card.id, null);
+  if (after.round.pendingPlacement === null || after.round.pendingPlacement === undefined) {
+    return; // this particular knock didn't leave a placement pending — nothing to check here
+  }
+  // lastFlipAt is fresh (round just started) — before this was fixed,
+  // tapDeck's cooldown check ran before any pendingPlacement check and
+  // would have wrongly reported this as "try again in a second" instead
+  // of the accurate "waiting for a new target" message.
+  assert.throws(
+    () => rooms.tapDeck(room.code, `s${after.round.turnIndex}`),
+    /Waiting for a new target card to be placed/
+  );
+});
+
+test("tapCard: a knock's deck-refill also resets the flip cooldown, not just the knock cooldown", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  // Force the knocker's hand down to exactly 2 cards (the matching card
+  // plus one other of a different rank, so it doesn't form a settled pair
+  // and turn this into an outright win instead) so this specific knock
+  // lands on the "1 card left" refill branch, which draws a real card
+  // from the deck. Retried: the refill draw is random and can itself
+  // happen to match the remaining card's rank, chaining into an outright
+  // win instead (a legitimate, separately-tested behavior — see the
+  // "priority chains" test in gameEngine.test.js) — re-roll until this
+  // particular attempt lands cleanly on the refill this test cares about.
+  let after;
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const { matchInfo } = forceRoundActiveWithMatch(rooms, room);
+    room.lastTargetAt = Date.now() - (KNOCK_COOLDOWN_MS + 100);
+    const otherCard = room.round.hands[matchInfo.playerIdx].find(
+      (c) => c.id !== matchInfo.card.id && c.rank !== matchInfo.card.rank
+    );
+    room.round.hands[matchInfo.playerIdx] = [matchInfo.card, otherCard];
+    // A stale lastFlipAt, as if the last MANUAL flip was long ago — this is
+    // exactly what let tapDeck bypass its own cooldown right after a
+    // refill, before this was fixed.
+    room.lastFlipAt = Date.now() - 60000;
+    after = rooms.tapCard(room.code, `s${matchInfo.playerIdx}`, matchInfo.card.id, null);
+    if (after.round.action.type === "knock-deck-refill") break;
+  }
+  assert.equal(after.round.action.type, "knock-deck-refill", "expected this specific knock to trigger the deck refill");
+  assert.ok(room.lastFlipAt > Date.now() - 100, "lastFlipAt should have been reset by the refill's real deck draw");
+  assert.throws(() => rooms.tapDeck(room.code, `s${after.round.turnIndex}`), /moment to look/);
 });
