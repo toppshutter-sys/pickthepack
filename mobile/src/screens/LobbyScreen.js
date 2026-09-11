@@ -4,6 +4,7 @@ import { emitWithAck } from "../socket";
 import GradientButton from "../components/GradientButton";
 import GlassPanel from "../components/GlassPanel";
 import InviteButton from "../components/InviteButton";
+import RoundHistoryPanel from "../components/RoundHistoryPanel";
 import { centeredContent } from "../responsive";
 import { confirmAsync } from "../confirm";
 import { shareInvite } from "../inviteLink";
@@ -97,6 +98,8 @@ export default function LobbyScreen({ socket, roomState, code, onLeaveRoom }) {
           Everyone antes ${roomState.packAmount} into the pot when the round starts. Go around the
           table matching cards until someone matches their whole hand and takes the pot.
         </Text>
+
+        <RoundHistoryPanel history={roomState.history} />
       </Animated.View>
     </ScrollView>
   );

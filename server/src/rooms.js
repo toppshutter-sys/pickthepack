@@ -26,6 +26,12 @@ const FLIP_COOLDOWN_MS = 1000;
 // valid tap wins, same as before.
 const KNOCK_COOLDOWN_MS = 1000;
 
+// How many past rounds room.history keeps (oldest dropped first) — a long
+// game night shouldn't grow this unbounded. Session-lifetime only, same as
+// the per-player net totals it sits alongside: it lives on the room object
+// and disappears whenever the room itself does (see leaveRoom).
+const HISTORY_LIMIT = 30;
+
 function makeRoomCode() {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I ambiguity
   let code = "";
@@ -65,6 +71,7 @@ class RoomManager {
       status: "lobby", // lobby | round-active | round-over
       round: null, // engine state (phase: 'instant-win' | 'matching')
       log: [],
+      history: [], // { winners: string[], potAmount, packAmount, method, at } — one entry per resolved round, newest pushed last; see HISTORY_LIMIT
       lastKnock: null, // { playerIdx, card } — the most recent knock this round, for the client's knock indicator
       lastFlipAt: 0, // timestamp of the most recent successful deck flip — see FLIP_COOLDOWN_MS
       lastTargetAt: 0, // timestamp the current target card first appeared — see KNOCK_COOLDOWN_MS
@@ -206,6 +213,18 @@ class RoomManager {
   }
 
   /**
+   * Records one resolved round in the table's running history — called
+   * from both places a round can actually end with a winner (the
+   * instant-win path in _resolveTarget, and the matched-out path in
+   * _applyTurnResult). `winners` is always an array (length 1 except for
+   * a split-pot instant-win tie) so both callers share one shape.
+   */
+  _addHistoryEntry(room, { winners, potAmount, method }) {
+    room.history.push({ winners, potAmount, packAmount: room.packAmount, method, at: Date.now() });
+    if (room.history.length > HISTORY_LIMIT) room.history.shift();
+  }
+
+  /**
    * Deals a fresh hand (once per round-cycle) and resolves the opening
    * state: a dealer's-card win pauses for a recast (see recastBet below)
    * rather than ending the round; otherwise an instant win pays out
@@ -298,13 +317,13 @@ class RoomManager {
       for (const idx of winners) room.players[idx].totalWon += share;
 
       const categoryLabel = CATEGORY_LABEL[result.category] || result.category;
+      const winnerNames = winners.map((i) => room.players[i].name);
       if (winners.length > 1) {
-        const names = winners.map((i) => room.players[i].name).join(" and ");
-        this.addLog(room, `Split pot! ${names} tied on the deal with ${categoryLabel} and share $${potAmount} ($${share.toFixed(2)} each).`);
+        this.addLog(room, `Split pot! ${winnerNames.join(" and ")} tied on the deal with ${categoryLabel} and share $${potAmount} ($${share.toFixed(2)} each).`);
       } else {
-        const winnerName = room.players[winners[0]].name;
-        this.addLog(room, `${winnerName} wins the $${potAmount} pot instantly with ${categoryLabel}!`);
+        this.addLog(room, `${winnerNames[0]} wins the $${potAmount} pot instantly with ${categoryLabel}!`);
       }
+      this._addHistoryEntry(room, { winners: winnerNames, potAmount, method: categoryLabel });
       room.dealerIndex = winners[0]; // winner deals next
       room.potAmount = 0;
       return;
@@ -353,6 +372,7 @@ class RoomManager {
       room.players[after.winnerIndex].totalWon += potAmount;
       const winnerName = room.players[after.winnerIndex].name;
       this.addLog(room, `${winnerName} knocked in their last card and wins the $${potAmount} pot!`);
+      this._addHistoryEntry(room, { winners: [winnerName], potAmount, method: "Matched their whole hand" });
       room.dealerIndex = after.winnerIndex;
       room.potAmount = 0;
     } else if (after.action && after.action.type === "knock-awaiting-placement") {
@@ -518,6 +538,9 @@ class RoomManager {
           }
         : null,
       log: room.log.slice(-20),
+      // Already capped at HISTORY_LIMIT as entries are added — no need to
+      // slice again here. Oldest-first; the client reverses for display.
+      history: room.history,
     };
   }
 
@@ -529,4 +552,4 @@ class RoomManager {
   }
 }
 
-module.exports = { RoomManager, makeRoomCode, FLIP_COOLDOWN_MS, KNOCK_COOLDOWN_MS };
+module.exports = { RoomManager, makeRoomCode, FLIP_COOLDOWN_MS, KNOCK_COOLDOWN_MS, HISTORY_LIMIT };

@@ -7,6 +7,7 @@ import Card from "../components/Card";
 import GradientButton from "../components/GradientButton";
 import GlassPanel from "../components/GlassPanel";
 import InviteButton from "../components/InviteButton";
+import RoundHistoryPanel from "../components/RoundHistoryPanel";
 import { emitWithAck } from "../socket";
 import { centeredContent, useScale } from "../responsive";
 import { confirmAsync } from "../confirm";
@@ -459,6 +460,10 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
           }
         />
       )}
+
+      {/* Between-rounds only — never shown while a round is actively in
+          progress, so it can't clutter the live table layout. */}
+      {(isInstantWin || isRoundOver) && <RoundHistoryPanel history={roomState.history} />}
 
       {/* Opponents seated around the top arc of an oval table — you sit at
           the bottom (see "Your hand" below the table surface). */}

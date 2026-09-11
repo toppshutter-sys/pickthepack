@@ -2,8 +2,10 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { RoomManager, FLIP_COOLDOWN_MS, KNOCK_COOLDOWN_MS } = require("./rooms");
-const { findMandatoryKnock } = require("./gameEngine");
+const { RoomManager, FLIP_COOLDOWN_MS, KNOCK_COOLDOWN_MS, HISTORY_LIMIT } = require("./rooms");
+const engine = require("./gameEngine");
+const { findMandatoryKnock } = engine;
+const c = engine.makeCard;
 
 function seatRoom(names) {
   const rooms = new RoomManager();
@@ -573,4 +575,105 @@ test("tapCard: a knock's deck-refill also resets the flip cooldown, not just the
   assert.equal(after.round.action.type, "knock-deck-refill", "expected this specific knock to trigger the deck refill");
   assert.ok(room.lastFlipAt > Date.now() - 100, "lastFlipAt should have been reset by the refill's real deck draw");
   assert.throws(() => rooms.tapDeck(room.code, `s${after.round.turnIndex}`), /moment to look/);
+});
+
+test("createRoom: starts with an empty round history", () => {
+  const { room } = seatRoom(["Ann", "Bo"]);
+  assert.deepEqual(room.history, []);
+});
+
+test("_resolveTarget: a single-winner instant win appends a history entry", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  let r, guard = 0;
+  do {
+    // An intermediate attempt that lands on round-active (matching phase,
+    // not yet resolved) leaves its ante uncollected-for — reset before
+    // each redeal so a string of failed attempts doesn't pile ante on top
+    // of ante and inflate the pot the eventual winning deal reports.
+    room.potAmount = 0;
+    r = rooms.startRound(room.code);
+    guard++;
+  } while (
+    !(r.status === "round-over" && r.round.phase === "instant-win" && r.round.winnerIndices.length === 1) &&
+    guard < 1000
+  );
+  assert.ok(guard < 1000, "expected a single-winner instant win within the retry budget");
+
+  const entry = room.history[room.history.length - 1];
+  const winnerName = room.players[r.round.winnerIndices[0]].name;
+  assert.deepEqual(entry.winners, [winnerName]);
+  assert.equal(entry.potAmount, room.packAmount * 3, "3 players anted in before this win");
+  assert.equal(entry.packAmount, room.packAmount);
+  assert.equal(typeof entry.method, "string");
+  assert.notEqual(entry.method, "Matched their whole hand", "should use the instant-win category label, not the matching-phase one");
+  assert.ok(entry.at <= Date.now() && entry.at > Date.now() - 5000);
+});
+
+test("_resolveTarget: an instant-win split pot lists every winner in one history entry", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo"]);
+  // Two same-suit (hearts) flushes with equal totals (21 each) — a genuine
+  // tie per evaluateInstantWin's own flush tiebreak (breakInstantWinTie),
+  // constructed directly rather than hoping a natural deal produces one,
+  // since a genuine tie is rare enough to make a redeal-loop impractical.
+  const hands = [
+    [c("3", "hearts"), c("8", "hearts"), c("10", "hearts")], // flush, total 21
+    [c("4", "hearts"), c("6", "hearts"), c("J", "hearts")], // flush, total 21
+  ];
+  const deck = [c("2", "spades")]; // dummy — just needs a non-J/6 top card
+  rooms._collectAnte(room);
+  rooms._resolveTarget(room, hands, deck);
+
+  assert.equal(room.status, "round-over");
+  const entry = room.history[room.history.length - 1];
+  assert.deepEqual([...entry.winners].sort(), ["Ann", "Bo"]);
+  assert.equal(entry.potAmount, room.packAmount * 2);
+});
+
+/** Plays the matching phase out (via the bot-style playMatchingTurn helper) until someone wins by matching their whole hand. */
+function forceMatchedOutWin(rooms, room) {
+  let steps = 0;
+  while ((room.round.winnerIndex === null || room.round.winnerIndex === undefined) && steps < 500) {
+    const actingPlayer = room.players[room.round.turnIndex];
+    const after = engine.playMatchingTurn(room.round);
+    rooms._applyTurnResult(room, actingPlayer, after);
+    steps++;
+  }
+  return steps;
+}
+
+test("_applyTurnResult: a matched-out win appends a history entry with 'Matched their whole hand'", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  let r, guard = 0;
+  do {
+    r = rooms.startRound(room.code);
+    guard++;
+  } while (r.status !== "round-active" && guard < 500);
+  assert.ok(guard < 500, "expected a matching-phase round within the retry budget");
+
+  const steps = forceMatchedOutWin(rooms, room);
+  assert.ok(steps < 500, "expected the matching phase to converge to a winner");
+  assert.equal(room.status, "round-over");
+
+  const entry = room.history[room.history.length - 1];
+  assert.equal(entry.method, "Matched their whole hand");
+  assert.deepEqual(entry.winners, [room.players[room.round.winnerIndex].name]);
+});
+
+test("history: caps at HISTORY_LIMIT entries, dropping the oldest first", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo"]);
+  for (let i = 0; i < HISTORY_LIMIT + 5; i++) {
+    rooms._addHistoryEntry(room, { winners: [`Winner${i}`], potAmount: 10, method: "Test" });
+  }
+  assert.equal(room.history.length, HISTORY_LIMIT);
+  assert.equal(room.history[0].winners[0], "Winner5", "the oldest 5 entries should have been dropped");
+  assert.equal(room.history[room.history.length - 1].winners[0], `Winner${HISTORY_LIMIT + 4}`);
+});
+
+test("toPlayerState: exposes the room's history", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo"]);
+  rooms._addHistoryEntry(room, { winners: ["Ann"], potAmount: 10, method: "Same-Suit (Flush)" });
+  const state = rooms.toPlayerState(room, "s0");
+  assert.equal(state.history.length, 1);
+  assert.deepEqual(state.history[0].winners, ["Ann"]);
+  assert.equal(state.history[0].method, "Same-Suit (Flush)");
 });
