@@ -241,12 +241,14 @@ function drawWithReshuffle(deck, tablePile, count, rng = Math.random) {
  *     Your hand SHRINKS when you knock — no replacement is drawn. If you
  *     still have 2+ cards left afterward, YOU then choose one of them
  *     (placeTarget) to place face-up as the new target everyone else can
- *     try to match; if only 1 card would be left to choose from, you keep
- *     it instead (placing your only card wouldn't be a real "match win")
- *     and the deck supplies the next target automatically. Either way,
- *     turnIndex advances by one from wherever it currently was — a knock
- *     is still "an action on the target," so the flip obligation rotates
- *     the same way a flip itself would, rather than staying put.
+ *     try to match — and once you do, YOU also get the flip-turn, in case
+ *     nobody matches it (you did the work of knocking and choosing the new
+ *     target, so that right is yours, not the next player's in line). If
+ *     only 1 card would be left to choose from, you keep it instead
+ *     (placing your only card wouldn't be a real "match win") and the deck
+ *     supplies the next target automatically — that case (and any knock
+ *     that wins the round outright) advances turnIndex by one from
+ *     wherever it currently was, same as a flip would.
  *   - Tap the deck -> flipFromDeck(state, playerIdx): only the player whose
  *     turn it is to flip may do this, and only if THEY personally have no
  *     mandatory match sitting in their own hand (the mandatory-knock rule
@@ -371,12 +373,19 @@ function attemptKnock(state, playerIdx, cardId, expectedTargetId, rng = Math.ran
   // the same player (see _resolveAutoMatchChain) before this settles.
   let result = _resolveAutoMatchChain(_resolveKnock(state, playerIdx, card, rng), playerIdx, rng);
 
-  // A knock still advances the flip-turn by one, from wherever it
-  // currently is — independent of who actually knocked. A knock is still
-  // "an action on the target," same as a flip, so the obligation to flip
-  // next rotates the same way; it doesn't hand the turn to the knocker.
+  // A knock advances the flip-turn by one, from wherever it currently is —
+  // independent of who actually knocked — EXCEPT when it lands on a
+  // pendingPlacement: there, turnIndex is left untouched here and instead
+  // set by placeTarget once the knocker actually places their new target,
+  // to the knocker's own index. Setting it here instead (to whoever was
+  // already next in line) would hand the very next flip to some other
+  // player before the knocker had even placed their card — the knocker
+  // did all the work of knocking AND choosing the new target, so they get
+  // first right to flip it if nobody matches it, not the player after them.
   if (result.winnerIndex === null || result.winnerIndex === undefined) {
-    result = { ...result, turnIndex: (state.turnIndex + 1) % numPlayers };
+    if (result.pendingPlacement === null || result.pendingPlacement === undefined) {
+      result = { ...result, turnIndex: (state.turnIndex + 1) % numPlayers };
+    }
   }
   return result;
 }
@@ -385,6 +394,10 @@ function attemptKnock(state, playerIdx, cardId, expectedTargetId, rng = Math.ran
  * Resolves a pending placement (see attemptKnock above): the player who
  * just knocked, and ONLY that player, chooses one of their remaining cards
  * to place face-up as the new target for everyone else to try to match.
+ * turnIndex is set here (not back in attemptKnock) to the placer's own
+ * index — they get first right to flip this card if nobody matches it,
+ * rather than that right having already passed to the next player before
+ * they even placed anything.
  */
 function placeTarget(state, playerIdx, cardId) {
   if (state.winnerIndex !== null && state.winnerIndex !== undefined) {
@@ -411,6 +424,7 @@ function placeTarget(state, playerIdx, cardId) {
     pendingPlacement: null,
     winnerIndex: null,
     action: { type: "place-target", playerIdx, card },
+    turnIndex: playerIdx,
   };
 }
 
