@@ -9,6 +9,7 @@ import GlassPanel from "../components/GlassPanel";
 import InviteButton from "../components/InviteButton";
 import RoundHistoryPanel from "../components/RoundHistoryPanel";
 import { emitWithAck } from "../socket";
+import { useSoundEnabled } from "../useSoundEnabled";
 import { centeredContent, useScale } from "../responsive";
 import { confirmAsync } from "../confirm";
 import { shareInvite } from "../inviteLink";
@@ -19,7 +20,8 @@ import { colors, gradients } from "../theme";
 // Haptics.impactAsync(...).catch(() => {}): a blocked/failed playback
 // (autoplay policy, a not-yet-loaded player, etc.) should never interrupt
 // gameplay.
-async function playSoundSafely(player) {
+async function playSoundSafely(player, soundEnabledRef) {
+  if (!soundEnabledRef.current) return;
   try {
     await player.seekTo(0);
     player.play();
@@ -175,6 +177,7 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
     winSound.volume = 0.35;
     startSound.volume = 0.3;
   }, [flipSound, knockSound, winSound, startSound]);
+  const [soundEnabled, setSoundEnabled, soundEnabledRef] = useSoundEnabled();
 
   // Card flip — only for a card actually drawn FROM THE DECK (a manual
   // flip, or a knock's own "1 card left" auto-refill), not a placed
@@ -199,7 +202,7 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
       prevDeckCount !== null &&
       round.deckCount < prevDeckCount
     ) {
-      playSoundSafely(flipSound);
+      playSoundSafely(flipSound, soundEnabledRef);
     }
     flipTrackRef.current = { faceUpId, deckCount: round.deckCount };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -214,7 +217,7 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
   useEffect(() => {
     const cardId = round && round.lastKnock ? round.lastKnock.card.id : null;
     if (cardId !== null && cardId !== lastKnockCardIdRef.current) {
-      playSoundSafely(knockSound);
+      playSoundSafely(knockSound, soundEnabledRef);
     }
     lastKnockCardIdRef.current = cardId;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -243,7 +246,7 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
   const lastHistoryLengthRef = useRef(0);
   useEffect(() => {
     if (historyLength > lastHistoryLengthRef.current) {
-      playSoundSafely(winSound);
+      playSoundSafely(winSound, soundEnabledRef);
     }
     lastHistoryLengthRef.current = historyLength;
   }, [historyLength]);
@@ -259,7 +262,7 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
   useEffect(() => {
     const isLive = roomState.status === "round-active";
     if (isLive && !roundStartedRef.current) {
-      playSoundSafely(startSound);
+      playSoundSafely(startSound, soundEnabledRef);
     }
     roundStartedRef.current = isLive;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -372,9 +375,14 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
           </GlassPanel>
         </View>
 
-        <TouchableOpacity onPress={handleLeave} disabled={busy} activeOpacity={0.7} style={styles.leaveTopButton}>
-          <Text style={styles.leaveText}>Leave table</Text>
-        </TouchableOpacity>
+        <View style={[styles.topLinksRow, styles.leaveTopButton]}>
+          <TouchableOpacity onPress={handleLeave} disabled={busy} activeOpacity={0.7}>
+            <Text style={styles.leaveText}>Leave table</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setSoundEnabled(!soundEnabled)} activeOpacity={0.7}>
+            <Text style={styles.soundToggleText}>{soundEnabled ? "🔊 Sound" : "🔇 Sound"}</Text>
+          </TouchableOpacity>
+        </View>
 
         <LinearGradient colors={gradients.sunset} start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }} style={styles.dealerCardBanner}>
           <Text style={styles.dealerCardTitle}>
@@ -474,6 +482,9 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
       <View style={styles.topLinksRow}>
         <TouchableOpacity onPress={handleLeave} disabled={busy} activeOpacity={0.7}>
           <Text style={styles.leaveText}>Leave table</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setSoundEnabled(!soundEnabled)} activeOpacity={0.7}>
+          <Text style={styles.soundToggleText}>{soundEnabled ? "🔊 Sound" : "🔇 Sound"}</Text>
         </TouchableOpacity>
         {isRoundOver && players.length < 6 && <InviteButton onPress={handleShare} copied={linkCopied} />}
       </View>
@@ -763,4 +774,5 @@ const styles = StyleSheet.create({
   leaveTopButton: { marginBottom: 16 },
   topLinksRow: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 20, marginBottom: 16 },
   leaveText: { color: colors.negative, fontSize: 14 },
+  soundToggleText: { color: colors.textMuted, fontSize: 14 },
 });
