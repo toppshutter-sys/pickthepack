@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { StyleSheet, StatusBar, View, Animated, Easing } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
+import { setAudioModeAsync } from "expo-audio";
 import HomeScreen from "./src/screens/HomeScreen";
 import LobbyScreen from "./src/screens/LobbyScreen";
 import GameScreen from "./src/screens/GameScreen";
@@ -75,6 +76,18 @@ function AmbientGlow() {
 export default function App() {
   const [session, setSession] = useState(null); // { socket, code, playerName, serverUrl }
   const [roomState, setRoomState] = useState(null);
+
+  // expo-audio never configures the native audio session on its own — left
+  // unset, iOS's AVAudioSession stays at its bare default, which respects
+  // the hardware silent/mute switch, so every sound effect would silently
+  // do nothing on a muted phone even though the code is otherwise correct
+  // (this doesn't exist on web, which is why it wouldn't show up there).
+  // One explicit call here, app-wide, fixes it for every sound effect.
+  useEffect(() => {
+    setAudioModeAsync({ playsInSilentMode: true }).catch(() => {
+      // Sound is a nice-to-have — never let audio-session setup block the app.
+    });
+  }, []);
 
   useEffect(() => {
     if (!session) return;
