@@ -20,7 +20,7 @@ import { colors } from "../theme";
 const STORAGE_KEY = "pick-the-pack:home-form";
 
 export default function HomeScreen({ onEnterRoom }) {
-  const [serverUrl, setServerUrl] = useState("https://pickthepack.onrender.com");
+  const [serverUrl, setServerUrl] = useState("https://pick-the-pack-server.onrender.com");
   const [playerName, setPlayerName] = useState("");
   const [packAmount, setPackAmount] = useState(5);
   const [joinCode, setJoinCode] = useState("");
@@ -127,7 +127,7 @@ export default function HomeScreen({ onEnterRoom }) {
               onChangeText={setServerUrl}
               autoCapitalize="none"
               autoCorrect={false}
-              placeholder="https://pickthepack.onrender.com"
+              placeholder="https://pick-the-pack-server.onrender.com"
               placeholderTextColor="#9c8f78"
             />
             <Text style={styles.hint}>

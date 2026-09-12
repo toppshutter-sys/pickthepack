@@ -88,7 +88,7 @@ update it by hand in the dashboard (Settings → Build Command) and trigger a Ma
 the service to the Blueprint (New → Blueprint, pointing at this repo, and accept adopting the
 existing service if offered) so future `render.yaml` changes sync automatically.
 
-To open it: visit your server's URL directly in a browser (e.g. `https://pickthepack.onrender.com`)
+To open it: visit your server's URL directly in a browser (e.g. `https://pick-the-pack-server.onrender.com`)
 on any device. The server-address field on the home screen is hidden by default (behind an
 "Advanced" link) since it already defaults to that same URL — there's nothing to type, just a name
 and a room code.
