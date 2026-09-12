@@ -165,14 +165,16 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
   // Sound effects — preloaded once via useAudioPlayer (auto-disposed on
   // unmount) rather than re-instantiated on every render. Kept subtle:
   // this is a casual card game, not an arcade.
-  const flipSound = useAudioPlayer(require("../../assets/sounds/flip.wav"));
-  const knockSound = useAudioPlayer(require("../../assets/sounds/knock.wav"));
-  const winSound = useAudioPlayer(require("../../assets/sounds/win.wav"));
+  const flipSound = useAudioPlayer(require("../../assets/sounds/flipcard.mp3"));
+  const knockSound = useAudioPlayer(require("../../assets/sounds/placing-playing-card.mp3"));
+  const winSound = useAudioPlayer(require("../../assets/sounds/win.m4a"));
+  const startSound = useAudioPlayer(require("../../assets/sounds/start.m4a"));
   useEffect(() => {
     flipSound.volume = 0.25;
     knockSound.volume = 0.3;
     winSound.volume = 0.35;
-  }, [flipSound, knockSound, winSound]);
+    startSound.volume = 0.3;
+  }, [flipSound, knockSound, winSound, startSound]);
 
   // Card flip — only for a card actually drawn FROM THE DECK (a manual
   // flip, or a knock's own "1 card left" auto-refill), not a placed
@@ -245,6 +247,23 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
     }
     lastHistoryLengthRef.current = historyLength;
   }, [historyLength]);
+
+  // Round start — fires once per actual deal. This component stays mounted
+  // across a whole game session (round-active <-> round-over cycles without
+  // ever returning to the lobby), so "a new round started" means status
+  // transitioning INTO round-active from anything else, not just mounting.
+  // Same reconnect tradeoff as the other trackers above: joining mid-round
+  // plays one sound it technically shouldn't, which is far cheaper than
+  // ever missing a real start.
+  const roundStartedRef = useRef(false);
+  useEffect(() => {
+    const isLive = roomState.status === "round-active";
+    if (isLive && !roundStartedRef.current) {
+      playSoundSafely(startSound);
+    }
+    roundStartedRef.current = isLive;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomState.status]);
 
   async function act(event, payload) {
     setError("");
