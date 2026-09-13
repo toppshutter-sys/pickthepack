@@ -207,7 +207,7 @@ test("attemptKnock: matching is a free-for-all — a player who is NOT the flip-
   assert.equal(next.turnIndex, 0, "turnIndex is left untouched until the knocker actually places their new target");
 
   const placed = engine.placeTarget(next, 1, "5-clubs");
-  assert.equal(placed.turnIndex, 1, "once placed, the knocker themselves gets the flip-turn, not the next player in line");
+  assert.equal(placed.turnIndex, 0, "the flip-turn goes to the player after the knocker (player 1), which wraps to player 0 here");
 });
 
 test("attemptKnock: a stale target (someone else already matched it) is rejected with a distinct message", () => {
@@ -264,7 +264,7 @@ test("attemptKnock: only one card would be left to place -> keeps it and refills
   assert.equal(next.deck.length, 1);
 });
 
-test("attemptKnock + placeTarget: a knock requiring placement hands the flip-turn to the placer, not the next player in line", () => {
+test("attemptKnock + placeTarget: a knock requiring placement advances the flip-turn to the player after the KNOCKER, deferred until placement happens", () => {
   const state = {
     hands: [
       [c("K", "hearts")], // player 0 — flip-turn holder, no match
@@ -283,7 +283,7 @@ test("attemptKnock + placeTarget: a knock requiring placement hands the flip-tur
   assert.equal(next.turnIndex, 0, "turnIndex doesn't move yet — still whatever it was before the knock");
 
   const placed = engine.placeTarget(next, 1, "9-clubs");
-  assert.equal(placed.turnIndex, 1, "placing hands the flip-turn to player 1 (the placer) — not player 2, next after them");
+  assert.equal(placed.turnIndex, 2, "lands on player 2 (the player after knocker 1), not player 0 who held the old turn");
 });
 
 test("attemptKnock: turnIndex wraps around past the last player", () => {
