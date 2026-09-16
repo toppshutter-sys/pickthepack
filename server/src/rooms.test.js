@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { RoomManager, FLIP_COOLDOWN_MS, KNOCK_COOLDOWN_MS, HISTORY_LIMIT } = require("./rooms");
+const { RoomManager, FLIP_COOLDOWN_MS, KNOCK_COOLDOWN_MS, HISTORY_LIMIT, STARTING_BALANCE } = require("./rooms");
 const engine = require("./gameEngine");
 const { findMandatoryKnock } = engine;
 const c = engine.makeCard;
@@ -103,6 +103,67 @@ test("leaveRoom: a disconnected (not left) player still counts as present — ta
   // Two players still remain (Ann disconnected + Cy connected) — not
   // actually down to one, so the solo-player lobby-reset never fires.
   assert.deepEqual(after.players.map((p) => p.name), ["Ann", "Cy"]);
+});
+
+test("_netFor: a fresh player's net is STARTING_BALANCE, not 0", () => {
+  const { rooms, room } = seatRoom(["Ann"]);
+  assert.equal(rooms._netFor(room.players[0]), STARTING_BALANCE);
+});
+
+test("bootIneligiblePlayers: leaves everyone alone when every net covers the ante", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]); // packAmount 5, all fresh at STARTING_BALANCE
+  const booted = rooms.bootIneligiblePlayers(room.code);
+  assert.deepEqual(booted, []);
+  assert.equal(room.players.length, 3);
+});
+
+test("bootIneligiblePlayers: removes a connected player whose net can't cover the ante", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]); // packAmount 5
+  // Drive Bo's net down to 4 (< the $5 ante) without touching anyone else.
+  room.players[1].totalContributed = STARTING_BALANCE - 4;
+  const booted = rooms.bootIneligiblePlayers(room.code);
+  assert.deepEqual(booted, [{ socketId: "s1", name: "Bo" }]);
+  assert.deepEqual(room.players.map((p) => p.name), ["Ann", "Cy"]);
+});
+
+test("bootIneligiblePlayers: a disconnected player is left alone, not booted", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  room.players[1].totalContributed = STARTING_BALANCE - 4; // Bo can't afford it...
+  rooms.markDisconnected("s1"); // ...but is already gone from play, not actively at risk
+  const booted = rooms.bootIneligiblePlayers(room.code);
+  assert.deepEqual(booted, []);
+  assert.equal(room.players.length, 3);
+});
+
+test("bootIneligiblePlayers: dealerIndex is reindexed the same way leaveRoom does", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  room.dealerIndex = 2; // Cy deals
+  room.players[0].totalContributed = STARTING_BALANCE - 4; // Ann (index 0) can't afford it
+  rooms.bootIneligiblePlayers(room.code);
+  assert.deepEqual(room.players.map((p) => p.name), ["Bo", "Cy"]);
+  assert.equal(room.dealerIndex, 1); // still points at Cy
+});
+
+test("bootIneligiblePlayers: booting down to one player resets the table to a fresh lobby", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo"]);
+  room.players[1].totalContributed = STARTING_BALANCE - 4; // Bo can't afford it
+  const booted = rooms.bootIneligiblePlayers(room.code);
+  assert.deepEqual(booted, [{ socketId: "s1", name: "Bo" }]);
+  assert.deepEqual(room.players.map((p) => p.name), ["Ann"]);
+  assert.equal(room.status, "lobby");
+});
+
+test("bootIneligiblePlayers: booting the last remaining player deletes the room", () => {
+  const { rooms, room } = seatRoom(["Ann"]);
+  room.players[0].totalContributed = STARTING_BALANCE - 4;
+  const booted = rooms.bootIneligiblePlayers(room.code);
+  assert.deepEqual(booted, [{ socketId: "s0", name: "Ann" }]);
+  assert.throws(() => rooms.startRound(room.code), /Room not found/);
+});
+
+test("bootIneligiblePlayers: unknown room returns an empty list rather than throwing", () => {
+  const rooms = new RoomManager();
+  assert.deepEqual(rooms.bootIneligiblePlayers("NOPE1"), []);
 });
 
 test("startRound: from the lobby (no winner yet), any seated player may start it", () => {
@@ -677,6 +738,12 @@ test("toPlayerState: exposes the room's history", () => {
   assert.equal(state.history.length, 1);
   assert.deepEqual(state.history[0].winners, ["Ann"]);
   assert.equal(state.history[0].method, "Same-Suit (Flush)");
+});
+
+test("toPlayerState: exposes startingBalance so the client can compute each player's real net", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo"]);
+  const state = rooms.toPlayerState(room, "s0");
+  assert.equal(state.startingBalance, STARTING_BALANCE);
 });
 
 test("toPlayerState: exposes matchedCards so a matched-out winner's cards are still visible once their hand is empty", () => {

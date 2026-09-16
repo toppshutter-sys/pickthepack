@@ -72,11 +72,12 @@ const CATEGORY_LABEL = {
 };
 
 // Running net position for one table, for the length of one game night —
-// how much a player has won minus how much they've anted in, computed
-// straight from data the server already tracks and broadcasts. No account
-// or profile is involved; this resets whenever the table itself resets.
-function netFor(p) {
-  return (p && p.totalWon ? p.totalWon : 0) - (p && p.totalContributed ? p.totalContributed : 0);
+// startingBalance (the table's initial bankroll, from the server — see
+// STARTING_BALANCE in rooms.js) plus how much a player has won, minus how
+// much they've anted in. No account or profile is involved; this resets
+// whenever the table itself resets.
+function netFor(p, startingBalance) {
+  return (startingBalance || 0) + (p && p.totalWon ? p.totalWon : 0) - (p && p.totalContributed ? p.totalContributed : 0);
 }
 
 // Rounds to the nearest cent and drops a trailing ".00" — split pots divide
@@ -118,8 +119,8 @@ function netTextStyle(n) {
  * it — the delta makes "I just won $20" / "I just lost $5" visible on its
  * own, right when it happens, not just folded into a bigger number.
  */
-function NetPill({ player, size = "small", delta }) {
-  const n = netFor(player);
+function NetPill({ player, size = "small", delta, startingBalance }) {
+  const n = netFor(player, startingBalance);
   const showDelta = typeof delta === "number" && delta !== 0;
   return (
     <GlassPanel
@@ -498,7 +499,7 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
                   {p.name}
                   {i === you ? " (you)" : ""}
                 </Text>
-                <NetPill player={p} delta={roundDeltaFor(i)} />
+                <NetPill player={p} delta={roundDeltaFor(i)} startingBalance={roomState.startingBalance} />
               </View>
               <Text style={round.recastReady[i] ? styles.recastDone : styles.recastPending}>
                 {round.recastReady[i] ? "✓ recast" : p.connected ? "waiting…" : "disconnected"}
@@ -614,7 +615,7 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
               {p.name}
               {winnerSet.has(i) ? " 🏆" : ""}
             </Text>
-            <NetPill player={p} size="tiny" delta={roundDeltaFor(i)} />
+            <NetPill player={p} size="tiny" delta={roundDeltaFor(i)} startingBalance={roomState.startingBalance} />
             <Hand cards={displayHandFor(i)} size="small" fan dealFrom="below" maxWidth={seatWidth} />
           </View>
         ))}
@@ -682,7 +683,7 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
           Your hand
           {winnerSet.has(you) ? " 🏆" : ""}
         </Text>
-        <NetPill player={players[you]} size="large" delta={roundDeltaFor(you)} />
+        <NetPill player={players[you]} size="large" delta={roundDeltaFor(you)} startingBalance={roomState.startingBalance} />
         {!isInstantWin && !isRoundOver ? (
           <Text style={styles.turnHint}>
             {isMyPendingPlacement

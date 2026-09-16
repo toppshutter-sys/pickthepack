@@ -24,13 +24,19 @@ const FLIP_COOLDOWN_MS = 1000;
 // claim a card before everyone else has even had a chance to see it. Once
 // this passes, matching goes back to being a genuine free-for-all — first
 // valid tap wins, same as before.
-const KNOCK_COOLDOWN_MS = 1000;
+const KNOCK_COOLDOWN_MS = 3000;
 
 // How many past rounds room.history keeps (oldest dropped first) — a long
 // game night shouldn't grow this unbounded. Session-lifetime only, same as
 // the per-player net totals it sits alongside: it lives on the room object
 // and disappears whenever the room itself does (see leaveRoom).
 const HISTORY_LIMIT = 30;
+
+// Every player's net starts here (not 0) — a running bankroll, not just a
+// win/loss tally, so it has somewhere to actually go down FROM. See
+// _netFor and bootIneligiblePlayers below for how this keeps it from ever
+// going negative.
+const STARTING_BALANCE = 50;
 
 function makeRoomCode() {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I ambiguity
@@ -154,6 +160,53 @@ class RoomManager {
     }
 
     return room;
+  }
+
+  /** A player's running bankroll — starts at STARTING_BALANCE, not 0. */
+  _netFor(player) {
+    return STARTING_BALANCE + player.totalWon - player.totalContributed;
+  }
+
+  /**
+   * Removes any connected player whose net can no longer cover this
+   * table's ante — called right before a NEW round deals (never mid
+   * dealer's-card recast cycle, where hands are already dealt and indices
+   * are load-bearing against them, same reason leaveRoom blocks a
+   * voluntary leave there too). This is what keeps a net from ever going
+   * negative: nobody is ever charged an ante they can't afford in the
+   * first place, and it's also how "reaches 0 and loses" eventually leads
+   * to removal — the very next time a round tries to start, 0 is always
+   * less than any positive pack amount.
+   *
+   * Mutates the room directly (splicing players out exactly like
+   * leaveRoom does) and returns the array of { socketId, name } removed
+   * this pass (empty if nobody needed to go) — the caller notifies each
+   * one directly, since a booted player is gone from room.players by the
+   * time anything else broadcasts to the room.
+   */
+  bootIneligiblePlayers(code) {
+    const room = this.rooms.get(code);
+    if (!room) return [];
+    const booted = [];
+    for (const p of [...room.players]) {
+      if (!p.connected || this._netFor(p) >= room.packAmount) continue;
+      const idx = room.players.findIndex((x) => x.id === p.id);
+      if (idx === -1) continue;
+      room.players.splice(idx, 1);
+      if (idx < room.dealerIndex) room.dealerIndex -= 1;
+      else if (room.dealerIndex >= room.players.length) room.dealerIndex = 0;
+      this.addLog(room, `${p.name} couldn't cover the $${room.packAmount} ante and was removed from the table.`);
+      booted.push({ socketId: p.id, name: p.name });
+    }
+    if (booted.length === 0) return booted;
+    if (room.players.length === 0) {
+      this.rooms.delete(code);
+    } else if (room.players.length === 1) {
+      room.status = "lobby";
+      room.round = null;
+      this.addLog(room, `${room.players[0].name} is the only one left — waiting for more players.`);
+    }
+    return booted;
   }
 
   /**
@@ -491,6 +544,7 @@ class RoomManager {
     return {
       code: room.code,
       packAmount: room.packAmount,
+      startingBalance: STARTING_BALANCE,
       players: room.players.map((p) => ({
         name: p.name,
         connected: p.connected,
@@ -549,4 +603,4 @@ class RoomManager {
   }
 }
 
-module.exports = { RoomManager, makeRoomCode, FLIP_COOLDOWN_MS, KNOCK_COOLDOWN_MS, HISTORY_LIMIT };
+module.exports = { RoomManager, makeRoomCode, FLIP_COOLDOWN_MS, KNOCK_COOLDOWN_MS, HISTORY_LIMIT, STARTING_BALANCE };

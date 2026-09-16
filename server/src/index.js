@@ -104,6 +104,24 @@ io.on("connection", (socket) => {
   socket.on(
     "start-round",
     safeHandler(socket, ({ code }, ack) => {
+      // Checked here, not inside startRound itself — anyone whose net can
+      // no longer cover this table's ante is removed BEFORE a new hand is
+      // dealt, so nobody's ever charged into a negative balance. Their
+      // own client gets no ordinary room-state update (they're no longer
+      // in room.players by the time one goes out), so tell them directly.
+      const booted = rooms.bootIneligiblePlayers(code);
+      for (const b of booted) {
+        io.to(b.socketId).emit("booted", { reason: "Your balance can't cover this table's ante anymore." });
+      }
+      const roomAfterBoot = rooms.rooms.get(code);
+      if (!roomAfterBoot || roomAfterBoot.players.length < 2) {
+        // Booting may have dropped the table below 2 players — nothing
+        // left to deal. Reflect whatever's left (if anything) rather than
+        // surfacing a "need at least 2 players" error nobody asked for.
+        ack && ack({ ok: true });
+        if (roomAfterBoot) rooms.broadcastState(roomAfterBoot, io);
+        return;
+      }
       const room = rooms.startRound(code, socket.id);
       ack && ack({ ok: true });
       rooms.broadcastState(room, io);

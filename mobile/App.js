@@ -7,6 +7,7 @@ import HomeScreen from "./src/screens/HomeScreen";
 import LobbyScreen from "./src/screens/LobbyScreen";
 import GameScreen from "./src/screens/GameScreen";
 import { emitWithAck } from "./src/socket";
+import { notify } from "./src/confirm";
 import { gradients } from "./src/theme";
 
 /**
@@ -103,6 +104,14 @@ export default function App() {
     function onDisconnect() {
       console.warn("Disconnected from server.");
     }
+    // Sent when this player's net can no longer cover the table's ante —
+    // they're removed server-side right before the next deal, before any
+    // ordinary room-state update would reach them (they're already gone
+    // from room.players by then), so the server tells them directly.
+    function onBooted(payload) {
+      notify("You're out", payload && payload.reason ? payload.reason : "Your balance can't cover this table's ante anymore.");
+      handleLeaveRoom();
+    }
     // The socket is always already connected by the time this effect
     // attaches (HomeScreen awaited that itself before handing off a
     // session), so any "connect" event THIS listener observes is by
@@ -123,12 +132,14 @@ export default function App() {
     socket.on("game-error", onGameError);
     socket.on("disconnect", onDisconnect);
     socket.on("connect", onConnect);
+    socket.on("booted", onBooted);
 
     return () => {
       socket.off("room-state", onRoomState);
       socket.off("game-error", onGameError);
       socket.off("disconnect", onDisconnect);
       socket.off("connect", onConnect);
+      socket.off("booted", onBooted);
     };
   }, [session]);
 
