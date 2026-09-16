@@ -149,6 +149,30 @@ function NetPill({ player, size = "small", delta }) {
   );
 }
 
+/**
+ * A plain "🔊 Sound" text link read the same regardless of state — the
+ * emoji swap alone was too subtle to register as an actual on/off control
+ * at a glance. This borrows NetPill's exact pill-plus-colored-border
+ * treatment (same green/red tones) so on vs. off reads immediately, the
+ * same way a positive vs. negative net already does elsewhere on this
+ * screen, rather than inventing a new indicator style.
+ */
+function SoundToggle({ enabled, onToggle }) {
+  return (
+    <TouchableOpacity onPress={onToggle} activeOpacity={0.7}>
+      <GlassPanel
+        style={styles.soundToggle}
+        radius={999}
+        borderColor={enabled ? "rgba(92,214,138,0.45)" : "rgba(255,145,132,0.4)"}
+      >
+        <Text style={[styles.soundToggleText, enabled ? styles.netTextPositive : styles.netTextNegative]}>
+          {enabled ? "🔊 Sound On" : "🔇 Sound Off"}
+        </Text>
+      </GlassPanel>
+    </TouchableOpacity>
+  );
+}
+
 export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -436,9 +460,7 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
           <TouchableOpacity onPress={handleLeave} disabled={busy} activeOpacity={0.7}>
             <Text style={styles.leaveText}>Leave table</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => setSoundEnabled(!soundEnabled)} activeOpacity={0.7}>
-            <Text style={styles.soundToggleText}>{soundEnabled ? "🔊 Sound" : "🔇 Sound"}</Text>
-          </TouchableOpacity>
+          <SoundToggle enabled={soundEnabled} onToggle={() => setSoundEnabled(!soundEnabled)} />
         </View>
 
         <LinearGradient colors={gradients.sunset} start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }} style={styles.dealerCardBanner}>
@@ -540,9 +562,7 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
         <TouchableOpacity onPress={handleLeave} disabled={busy} activeOpacity={0.7}>
           <Text style={styles.leaveText}>Leave table</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => setSoundEnabled(!soundEnabled)} activeOpacity={0.7}>
-          <Text style={styles.soundToggleText}>{soundEnabled ? "🔊 Sound" : "🔇 Sound"}</Text>
-        </TouchableOpacity>
+        <SoundToggle enabled={soundEnabled} onToggle={() => setSoundEnabled(!soundEnabled)} />
         {isRoundOver && players.length < 6 && <InviteButton onPress={handleShare} copied={linkCopied} />}
       </View>
 
@@ -833,5 +853,6 @@ const styles = StyleSheet.create({
   leaveTopButton: { marginBottom: 16 },
   topLinksRow: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 20, marginBottom: 16 },
   leaveText: { color: colors.negative, fontSize: 14 },
-  soundToggleText: { color: colors.textMuted, fontSize: 14 },
+  soundToggle: { paddingHorizontal: 10, paddingVertical: 4 },
+  soundToggleText: { fontSize: 12.5, fontWeight: "700" },
 });
