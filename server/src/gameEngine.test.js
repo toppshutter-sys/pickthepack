@@ -483,6 +483,30 @@ test("playMatchingTurn: matching the last active card wins and empties the hand"
   const next = engine.playMatchingTurn(state);
   assert.equal(next.winnerIndex, 0);
   assert.equal(next.hands[0].length, 0);
+  // The mandatory match is the K of spades (matches the K of diamonds
+  // target) — the remaining 4-4 pair is a settled pair, not knocked.
+  assert.deepEqual(next.matchedCards[0].map((c) => c.id), ["K-spades"], "the winning card is tracked even though the hand itself is now empty");
+});
+
+test("attemptKnock: matchedCards accumulates across a chained knock (1-card refill matching again), ending in a win", () => {
+  const state = {
+    hands: [[c("4", "hearts"), c("7", "clubs")]],
+    deck: [c("7", "diamonds")],
+    tablePile: [],
+    faceUpCard: c("4", "clubs"), // matches the 4 of hearts
+    turnIndex: 0,
+    winnerIndex: null,
+    pendingPlacement: null,
+    matchedCards: [[]],
+  };
+  const next = engine.attemptKnock(state, 0, "4-hearts");
+  assert.equal(next.winnerIndex, 0, "the refilled 7 of diamonds also matches the lone remaining 7 of clubs, chaining into a win");
+  assert.equal(next.hands[0].length, 0);
+  assert.deepEqual(
+    next.matchedCards[0].map((c) => c.id),
+    ["4-hearts", "7-clubs"],
+    "both knocked cards are tracked in the order they were matched, not just the last one"
+  );
 });
 
 // --- Orchestration: dealAndStartRound ----------------------------------

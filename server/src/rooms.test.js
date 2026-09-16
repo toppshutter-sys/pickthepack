@@ -678,3 +678,24 @@ test("toPlayerState: exposes the room's history", () => {
   assert.deepEqual(state.history[0].winners, ["Ann"]);
   assert.equal(state.history[0].method, "Same-Suit (Flush)");
 });
+
+test("toPlayerState: exposes matchedCards so a matched-out winner's cards are still visible once their hand is empty", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  let r, guard = 0;
+  do {
+    r = rooms.startRound(room.code);
+    guard++;
+  } while (r.status !== "round-active" && guard < 500);
+  assert.ok(guard < 500, "expected a matching-phase round within the retry budget");
+
+  const steps = forceMatchedOutWin(rooms, room);
+  assert.ok(steps < 500, "expected the matching phase to converge to a winner");
+
+  const state = rooms.toPlayerState(room, "s1"); // Bo, a non-winner viewer
+  const winnerIdx = room.dealerIndex; // the winner deals next
+  assert.equal(state.round.hands[winnerIdx].length, 0, "the winner's hand is empty — everything was matched away");
+  assert.ok(
+    state.round.matchedCards[winnerIdx].length > 0,
+    "but their matched cards are still tracked, visible to every player, not just the winner"
+  );
+});

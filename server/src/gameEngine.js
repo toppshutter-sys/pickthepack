@@ -274,6 +274,14 @@ function _resolveKnock(state, playerIdx, matchCard, rng) {
   const handAfterRemoval = hand.filter((c) => c.id !== matchCard.id);
   const newTablePile = [...state.tablePile, matchCard, state.faceUpCard];
   const { active: remainingActive } = classifyHandForMatching(handAfterRemoval);
+  // Every knock removes exactly one card from the knocker's OWN hand —
+  // tracked per player here so a matched-out win can still show everyone
+  // which of their cards actually won it, even though their hand itself
+  // ends up empty by the time they win. Falls back to an empty array per
+  // player for any state built before this field existed (hand-built test
+  // fixtures, mainly) rather than assuming it's always present.
+  const baseMatchedCards = state.matchedCards || state.hands.map(() => []);
+  const newMatchedCards = baseMatchedCards.map((cards, i) => (i === playerIdx ? [...cards, matchCard] : cards));
 
   if (remainingActive.length === 0) {
     // Hand fully resolved (either truly empty, or what's left is a settled
@@ -282,6 +290,7 @@ function _resolveKnock(state, playerIdx, matchCard, rng) {
     return {
       ...state,
       hands: newHands,
+      matchedCards: newMatchedCards,
       tablePile: newTablePile,
       faceUpCard: null,
       pendingPlacement: null,
@@ -301,6 +310,7 @@ function _resolveKnock(state, playerIdx, matchCard, rng) {
     return {
       ...state,
       hands: newHandsAfterKnock,
+      matchedCards: newMatchedCards,
       deck,
       tablePile,
       faceUpCard: drawn[0],
@@ -317,6 +327,7 @@ function _resolveKnock(state, playerIdx, matchCard, rng) {
   return {
     ...state,
     hands: newHandsAfterKnock,
+    matchedCards: newMatchedCards,
     tablePile: newTablePile,
     faceUpCard: null,
     pendingPlacement: playerIdx,
@@ -526,7 +537,7 @@ function dealHands(numPlayers, rng = Math.random) {
  * Returns one of:
  *   { phase: 'dealer-card-win', hands, deck, faceUpCard, dealerIndex }
  *   { phase: 'instant-win', hands, deck, winnerIndices, category, dealerIndex }
- *   { phase: 'matching', hands, deck, tablePile, faceUpCard, dealerIndex, turnIndex, winnerIndex: null, pendingPlacement: null }
+ *   { phase: 'matching', hands, deck, tablePile, faceUpCard, dealerIndex, turnIndex, winnerIndex: null, pendingPlacement: null, matchedCards }
  */
 function resolveOpeningTarget({ hands, deck, dealerIndex }) {
   const numPlayers = hands.length;
@@ -568,6 +579,7 @@ function resolveOpeningTarget({ hands, deck, dealerIndex }) {
     turnIndex: (dealerIndex + 1) % numPlayers,
     winnerIndex: null,
     pendingPlacement: null,
+    matchedCards: hands.map(() => []),
   };
 }
 

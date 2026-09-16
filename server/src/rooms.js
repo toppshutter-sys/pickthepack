@@ -515,6 +515,13 @@ class RoomManager {
             pendingPlacement: room.round.pendingPlacement ?? null,
             deckCount: room.round.deck ? room.round.deck.length : 0,
             tablePileCount: room.round.tablePile ? room.round.tablePile.length : 0,
+            // Every card a player has knocked away this round — already
+            // public the instant it's knocked (it goes face-up onto the
+            // shared table pile in a real game), so it's never masked the
+            // way an unplayed hand is. Lets a matched-out win still show
+            // which cards actually won it, even though the winner's hand
+            // itself ends up empty.
+            matchedCards: room.round.matchedCards || null,
             lastKnock: room.lastKnock
               ? { playerIdx: room.lastKnock.playerIdx, playerName: room.players[room.lastKnock.playerIdx].name, card: room.lastKnock.card }
               : null,

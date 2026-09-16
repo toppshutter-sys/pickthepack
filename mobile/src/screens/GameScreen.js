@@ -216,6 +216,21 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
     return null;
   }
 
+  // At round-over, a player who won by matching their whole hand away has
+  // an EMPTY hand by definition — nothing left there to show as "the
+  // winning cards." Falls back to their tracked matchedCards (every card
+  // they successfully knocked this round, oldest first) instead, so their
+  // seat still shows what actually won it rather than sitting blank. Left
+  // untouched for an instant win (their hand IS the winning combination,
+  // already visible as-is) and for anyone still holding cards.
+  function displayHandFor(playerIdx) {
+    const hand = (round && round.hands[playerIdx]) || [];
+    if (hand.length === 0 && isRoundOver && round && round.matchedCards && winnerSet.has(playerIdx)) {
+      return round.matchedCards[playerIdx] || [];
+    }
+    return hand;
+  }
+
   const roundIsLive = roomState.status === "round-active";
   useEffect(() => {
     if (!roundIsLive) return;
@@ -600,7 +615,7 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
               {winnerSet.has(i) ? " 🏆" : ""}
             </Text>
             <NetPill player={p} size="tiny" delta={roundDeltaFor(i)} />
-            <Hand cards={round.hands[i] || []} size="small" fan dealFrom="below" maxWidth={seatWidth} />
+            <Hand cards={displayHandFor(i)} size="small" fan dealFrom="below" maxWidth={seatWidth} />
           </View>
         ))}
       </View>
@@ -682,7 +697,7 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
           </Text>
         ) : null}
         <Hand
-          cards={round.hands[you] || []}
+          cards={displayHandFor(you)}
           onCardPress={isMyPendingPlacement ? placeCard : selectingMatch ? tapCard : undefined}
           disabled={busy}
           dealFrom="above"
