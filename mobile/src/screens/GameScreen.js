@@ -79,10 +79,23 @@ function netFor(p) {
   return (p && p.totalWon ? p.totalWon : 0) - (p && p.totalContributed ? p.totalContributed : 0);
 }
 
+// Rounds to the nearest cent and drops a trailing ".00" — split pots divide
+// evenly by however many winners tied, which isn't always a whole dollar.
+function formatMoney(n) {
+  const rounded = Math.round(n * 100) / 100;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
+}
+
 function formatNet(n) {
-  if (n > 0) return `+$${n}`;
-  if (n < 0) return `-$${Math.abs(n)}`;
+  if (n > 0) return `+$${formatMoney(n)}`;
+  if (n < 0) return `-$${formatMoney(Math.abs(n))}`;
   return "$0";
+}
+
+function formatDelta(n) {
+  if (n > 0) return `+$${formatMoney(n)}`;
+  if (n < 0) return `-$${formatMoney(Math.abs(n))}`;
+  return null;
 }
 
 function netPillBorderColor(n) {
@@ -97,9 +110,17 @@ function netTextStyle(n) {
   return styles.netTextZero;
 }
 
-/** The small pill shown next to a player's name — their running net for this table. */
-function NetPill({ player, size = "small" }) {
+/**
+ * The small pill shown next to a player's name — their running net for this
+ * table, plus (when `delta` is given, non-zero) what just happened THIS
+ * round specifically. The running net alone only shows the cumulative
+ * total, which buries a single round's result inside everything before
+ * it — the delta makes "I just won $20" / "I just lost $5" visible on its
+ * own, right when it happens, not just folded into a bigger number.
+ */
+function NetPill({ player, size = "small", delta }) {
   const n = netFor(player);
+  const showDelta = typeof delta === "number" && delta !== 0;
   return (
     <GlassPanel
       style={[styles.netPill, size === "large" && styles.netPillLarge, size === "tiny" && styles.netPillTiny]}
@@ -112,6 +133,18 @@ function NetPill({ player, size = "small" }) {
       >
         {size === "tiny" ? formatNet(n) : `Net ${formatNet(n)}`}
       </Text>
+      {showDelta && (
+        <Text
+          style={[
+            styles.netDeltaText,
+            size === "large" && styles.netDeltaTextLarge,
+            delta > 0 ? styles.netTextPositive : styles.netTextNegative,
+          ]}
+          numberOfLines={1}
+        >
+          {size === "tiny" ? formatDelta(delta) : `${formatDelta(delta)} this round`}
+        </Text>
+      )}
     </GlassPanel>
   );
 }
@@ -134,6 +167,30 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
 
   const { round, players, you, potAmount, packAmount } = roomState;
   const scale = useScale();
+
+  // Per-round win/loss for one player, computed fresh from whatever just
+  // resolved the round — the latest history entry for an instant or
+  // matched-out win, round.wonAmount for a dealer's-card win — rather than
+  // tracked via before/after snapshots. potAmount itself is already reset
+  // to 0 server-side by the time the client ever renders a round-over or
+  // awaiting-recast state, so this is the only reliable source left. Null
+  // outside those states, or for a player who wasn't actually dealt into
+  // this particular round (e.g. disconnected before ante was collected).
+  function roundDeltaFor(playerIdx) {
+    const player = players[playerIdx];
+    if (!player) return null;
+    if (roomState.status === "awaiting-recast") {
+      if (!round || round.wonAmount === undefined || round.wonAmount === null) return null;
+      if (playerIdx === roomState.dealerIndex) return round.wonAmount;
+      return player.connected ? -packAmount : null;
+    }
+    if (roomState.status === "round-over" && roomState.history && roomState.history.length > 0) {
+      const entry = roomState.history[roomState.history.length - 1];
+      if (entry.winners.includes(player.name)) return entry.potAmount / entry.winners.length;
+      return player.connected ? -packAmount : null;
+    }
+    return null;
+  }
 
   const roundIsLive = roomState.status === "round-active";
   useEffect(() => {
@@ -404,7 +461,7 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
                   {p.name}
                   {i === you ? " (you)" : ""}
                 </Text>
-                <NetPill player={p} />
+                <NetPill player={p} delta={roundDeltaFor(i)} />
               </View>
               <Text style={round.recastReady[i] ? styles.recastDone : styles.recastPending}>
                 {round.recastReady[i] ? "✓ recast" : p.connected ? "waiting…" : "disconnected"}
@@ -522,7 +579,7 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
               {p.name}
               {winnerSet.has(i) ? " 🏆" : ""}
             </Text>
-            <NetPill player={p} size="tiny" />
+            <NetPill player={p} size="tiny" delta={roundDeltaFor(i)} />
             <Hand cards={round.hands[i] || []} size="small" fan dealFrom="below" maxWidth={seatWidth} />
           </View>
         ))}
@@ -590,7 +647,7 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
           Your hand
           {winnerSet.has(you) ? " 🏆" : ""}
         </Text>
-        <NetPill player={players[you]} size="large" />
+        <NetPill player={players[you]} size="large" delta={roundDeltaFor(you)} />
         {!isInstantWin && !isRoundOver ? (
           <Text style={styles.turnHint}>
             {isMyPendingPlacement
@@ -734,6 +791,8 @@ const styles = StyleSheet.create({
   netTextPositive: { color: colors.positive },
   netTextNegative: { color: colors.negative },
   netTextZero: { color: colors.textMuted },
+  netDeltaText: { fontSize: 9, fontWeight: "700", marginTop: 1, textAlign: "center" },
+  netDeltaTextLarge: { fontSize: 12 },
   // The oval opponents sit around — position:relative so each seat's
   // position:absolute + percentage left/top resolves against ITS bounds,
   // not the whole screen.
