@@ -18,15 +18,14 @@ function seatRoom(names) {
 
 test("leaveRoom: removes the player from the lobby", () => {
   const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
-  const { room: after } = rooms.leaveRoom(room.code, "s1");
+  const after = rooms.leaveRoom(room.code, "s1");
   assert.deepEqual(after.players.map((p) => p.name), ["Ann", "Cy"]);
 });
 
 test("leaveRoom: the very last player leaving deletes the room", () => {
   const { rooms, room } = seatRoom(["Ann"]);
-  const { room: after, closedFor } = rooms.leaveRoom(room.code, "s0");
+  const after = rooms.leaveRoom(room.code, "s0");
   assert.equal(after, null);
-  assert.equal(closedFor, null);
   assert.throws(() => rooms.startRound(room.code), /Room not found/);
 });
 
@@ -43,7 +42,7 @@ test("leaveRoom: rejected mid-round — indices are load-bearing for an active h
 test("leaveRoom: dealerIndex shifts down when someone before the dealer leaves", () => {
   const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
   room.dealerIndex = 2; // Cy deals
-  const { room: after } = rooms.leaveRoom(room.code, "s0"); // Ann (index 0) leaves
+  const after = rooms.leaveRoom(room.code, "s0"); // Ann (index 0) leaves
   assert.deepEqual(after.players.map((p) => p.name), ["Bo", "Cy"]);
   assert.equal(after.dealerIndex, 1); // still points at Cy
 });
@@ -51,7 +50,7 @@ test("leaveRoom: dealerIndex shifts down when someone before the dealer leaves",
 test("leaveRoom: dealerIndex clamps to 0 when the last-seated dealer leaves", () => {
   const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
   room.dealerIndex = 2; // Cy deals
-  const { room: after } = rooms.leaveRoom(room.code, "s2"); // Cy leaves
+  const after = rooms.leaveRoom(room.code, "s2"); // Cy leaves
   assert.deepEqual(after.players.map((p) => p.name), ["Ann", "Bo"]);
   assert.equal(after.dealerIndex, 0);
 });
@@ -62,7 +61,7 @@ test("leaveRoom: leaving between hands (round-over) resets the room to a fresh l
   do {
     r = rooms.startRound(room.code);
   } while (r.status !== "round-over");
-  const { room: after } = rooms.leaveRoom(room.code, "s1");
+  const after = rooms.leaveRoom(room.code, "s1");
   assert.equal(after.status, "lobby");
   assert.equal(after.round, null);
 });
@@ -79,28 +78,30 @@ test("leaveRoom: a socket not seated in the room throws", () => {
 
 test("leaveRoom: when a non-host leaves and only the host remains, the host's table stays open in the lobby", () => {
   const { rooms, room } = seatRoom(["Ann", "Bo"]); // Ann (s0) is the host
-  const { room: after, closedFor } = rooms.leaveRoom(room.code, "s1"); // Bo leaves
-  assert.equal(closedFor, null);
+  const after = rooms.leaveRoom(room.code, "s1"); // Bo leaves
   assert.deepEqual(after.players.map((p) => p.name), ["Ann"]);
   assert.equal(after.status, "lobby");
   assert.equal(after.round, null);
 });
 
-test("leaveRoom: when the host leaves and only a non-host remains, their table closes and they're notified", () => {
+test("leaveRoom: when the host leaves and only a non-host remains, the table stays open for them too", () => {
   const { rooms, room } = seatRoom(["Ann", "Bo"]); // Ann (s0) is the host
-  const { room: after, closedFor } = rooms.leaveRoom(room.code, "s0"); // Ann (host) leaves
-  assert.equal(after, null, "the room is gone, not left open for the non-host to sit in alone");
-  assert.equal(closedFor, "s1", "Bo (the sole non-host remaining) is the one to notify");
-  assert.throws(() => rooms.startRound(room.code), /Room not found/);
+  const after = rooms.leaveRoom(room.code, "s0"); // Ann (host) leaves
+  assert.notEqual(after, null, "the room stays open — the host has no special claim to keep it alive that Bo lacks");
+  assert.deepEqual(after.players.map((p) => p.name), ["Bo"]);
+  assert.equal(after.status, "lobby");
+  assert.equal(after.round, null);
+  // Still just one player — a round genuinely can't start yet, but the
+  // table itself is alive and waiting, not deleted out from under Bo.
+  assert.throws(() => rooms.startRound(room.code), /Need at least 2 players/);
 });
 
-test("leaveRoom: a disconnected (not left) host still counts as present — table doesn't close on the other player", () => {
+test("leaveRoom: a disconnected (not left) player still counts as present — table doesn't close on the other player", () => {
   const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]); // Ann is host
-  rooms.markDisconnected("s0"); // host's connection dropped, but they're still seated (disconnect, not leave)
-  const { room: after, closedFor } = rooms.leaveRoom(room.code, "s1"); // Bo leaves
+  rooms.markDisconnected("s0"); // Ann's connection dropped, but she's still seated (disconnect, not leave)
+  const after = rooms.leaveRoom(room.code, "s1"); // Bo leaves
   // Two players still remain (Ann disconnected + Cy connected) — not
-  // actually down to one, so the solo-player closing logic never fires.
-  assert.equal(closedFor, null);
+  // actually down to one, so the solo-player lobby-reset never fires.
   assert.deepEqual(after.players.map((p) => p.name), ["Ann", "Cy"]);
 });
 

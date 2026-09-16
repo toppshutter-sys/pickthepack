@@ -111,13 +111,12 @@ class RoomManager {
    * so a leave there resets the room to a fresh lobby rather than leaving
    * stale, now-mis-indexed hands on screen.
    *
-   * Returns { room, closedFor }: `room` is the updated room (or null if it
-   * no longer exists), and `closedFor` is a socket id to notify directly —
-   * set when leaving drops the table to exactly one other player who isn't
-   * the host, since the game can't continue and that player didn't ask to
-   * leave themselves (see the one-player-left handling below), so there's
-   * no ordinary room-state broadcast that would tell their client to bail
-   * out to the home screen.
+   * Returns the updated room, or null if the last player leaving deleted
+   * it. The table stays open in the lobby for as long as ANYONE remains
+   * seated — even down to a single player, and regardless of whether that
+   * player is the host. The host is just whoever happened to create the
+   * table; they have no special claim to keep it open that any other
+   * remaining player doesn't equally have.
    */
   leaveRoom(code, socketId) {
     const room = this.rooms.get(code);
@@ -133,7 +132,7 @@ class RoomManager {
 
     if (room.players.length === 0) {
       this.rooms.delete(code);
-      return { room: null, closedFor: null };
+      return null;
     }
 
     if (idx < room.dealerIndex) room.dealerIndex -= 1;
@@ -146,24 +145,15 @@ class RoomManager {
 
     this.addLog(room, `${leavingName} left the table.`);
 
-    // One player left doesn't leave enough for a game — the host gets to
-    // keep the (now-empty) table open in the lobby waiting for others;
-    // anyone else left solo has no table to "own", so it closes and they
-    // get sent home too, same as everyone else leaving would.
+    // A round can't continue with fewer than 2 players — drop back to the
+    // lobby to wait for more, same as before anyone else had joined.
     if (room.players.length === 1) {
-      const lastPlayer = room.players[0];
-      if (lastPlayer.isHost) {
-        room.status = "lobby";
-        room.round = null;
-        this.addLog(room, `${lastPlayer.name} is the only one left — waiting for more players.`);
-        return { room, closedFor: null };
-      }
-      const closedFor = lastPlayer.id;
-      this.rooms.delete(code);
-      return { room: null, closedFor };
+      room.status = "lobby";
+      room.round = null;
+      this.addLog(room, `${room.players[0].name} is the only one left — waiting for more players.`);
     }
 
-    return { room, closedFor: null };
+    return room;
   }
 
   /**

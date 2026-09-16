@@ -7,7 +7,6 @@ import HomeScreen from "./src/screens/HomeScreen";
 import LobbyScreen from "./src/screens/LobbyScreen";
 import GameScreen from "./src/screens/GameScreen";
 import { emitWithAck } from "./src/socket";
-import { notify } from "./src/confirm";
 import { gradients } from "./src/theme";
 
 /**
@@ -104,14 +103,6 @@ export default function App() {
     function onDisconnect() {
       console.warn("Disconnected from server.");
     }
-    // Sent when leaving drops the table to just one other, non-host player
-    // — the game can't continue and that table closes, but they didn't
-    // ask to leave themselves, so there's no ordinary room-state update
-    // telling their client to bail out. Send them home directly instead.
-    function onRoomClosed(payload) {
-      notify("Table closed", payload && payload.reason ? payload.reason : "Everyone else left the table.");
-      handleLeaveRoom();
-    }
     // The socket is always already connected by the time this effect
     // attaches (HomeScreen awaited that itself before handing off a
     // session), so any "connect" event THIS listener observes is by
@@ -132,14 +123,12 @@ export default function App() {
     socket.on("game-error", onGameError);
     socket.on("disconnect", onDisconnect);
     socket.on("connect", onConnect);
-    socket.on("room-closed", onRoomClosed);
 
     return () => {
       socket.off("room-state", onRoomState);
       socket.off("game-error", onGameError);
       socket.off("disconnect", onDisconnect);
       socket.off("connect", onConnect);
-      socket.off("room-closed", onRoomClosed);
     };
   }, [session]);
 
