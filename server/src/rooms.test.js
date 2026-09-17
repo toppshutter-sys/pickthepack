@@ -608,6 +608,48 @@ test("tapDeck: a pending placement is reported as such, not misreported as the f
   );
 });
 
+test("toPlayerState: flipPriorityIdx is null for the opening dealt target, set to the flipper after a plain flip", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  const r = forceRoundActive(rooms, room);
+  let state = rooms.toPlayerState(room, "s0");
+  assert.equal(state.round.flipPriorityIdx, null, "nobody flipped the opening target — it was dealt");
+
+  room.lastFlipAt = Date.now() - (FLIP_COOLDOWN_MS + 100);
+  const flipperIdx = r.round.turnIndex;
+  rooms.tapDeck(room.code, `s${flipperIdx}`);
+  state = rooms.toPlayerState(room, "s0");
+  assert.equal(state.round.flipPriorityIdx, flipperIdx);
+});
+
+test("tapCard: the player who just flipped this target may knock it immediately, bypassing the knock cooldown", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  const r = forceRoundActive(rooms, room);
+  room.lastFlipAt = Date.now() - (FLIP_COOLDOWN_MS + 100);
+  const flipperIdx = r.round.turnIndex;
+  const after = rooms.tapDeck(room.code, `s${flipperIdx}`);
+  // lastTargetAt is fresh (the flip just happened) — an ordinary player
+  // would be turned away by the cooldown here. Use a non-matching card so
+  // a successful pass-through surfaces the engine's own "doesn't match"
+  // rejection, not a cooldown error — proving the cooldown check itself
+  // was bypassed, not that this particular tap happened to be legal.
+  const nonMatchingCard = after.round.hands[flipperIdx].find((c) => c.rank !== after.round.faceUpCard.rank);
+  assert.ok(nonMatchingCard, "expected at least one non-matching card in the flipper's hand");
+  assert.throws(
+    () => rooms.tapCard(room.code, `s${flipperIdx}`, nonMatchingCard.id, null),
+    (err) => !/moment to see/.test(err.message) && /doesn't match the target/.test(err.message)
+  );
+});
+
+test("tapCard: a different player still has to wait out the cooldown on a card someone else just flipped", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  const r = forceRoundActive(rooms, room);
+  room.lastFlipAt = Date.now() - (FLIP_COOLDOWN_MS + 100);
+  const flipperIdx = r.round.turnIndex;
+  const otherIdx = (flipperIdx + 1) % 3;
+  rooms.tapDeck(room.code, `s${flipperIdx}`);
+  assert.throws(() => rooms.tapCard(room.code, `s${otherIdx}`, "does-not-matter", null), /moment to see/);
+});
+
 test("tapCard: a knock's deck-refill also resets the flip cooldown, not just the knock cooldown", () => {
   const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
   // Force the knocker's hand down to exactly 2 cards (the matching card

@@ -81,6 +81,14 @@ class RoomManager {
       lastKnock: null, // { playerIdx, card } — the most recent knock this round, for the client's knock indicator
       lastFlipAt: 0, // timestamp of the most recent successful deck flip — see FLIP_COOLDOWN_MS
       lastTargetAt: 0, // timestamp the current target card first appeared — see KNOCK_COOLDOWN_MS
+      // Set only when the CURRENT target card came from a manual flip (tap
+      // the deck) — the flipper's own player index, null otherwise (the
+      // opening deal, a knock's own refill, or a placed target all leave
+      // this null). Lets that one player knock it immediately, ahead of
+      // the usual KNOCK_COOLDOWN_MS everyone else still has to wait out —
+      // see tapCard. Cleared the moment the target changes again, so it
+      // never lingers onto a card the flipper didn't actually reveal.
+      flipPriorityIdx: null,
     };
     this.rooms.set(code, room);
     return room;
@@ -288,6 +296,7 @@ class RoomManager {
     }
 
     room.lastKnock = null;
+    room.flipPriorityIdx = null;
     const { hands, deck } = engine.dealHands(room.players.length);
     this._collectAnte(room);
     this._resolveTarget(room, hands, deck);
@@ -409,6 +418,9 @@ class RoomManager {
     if (after.action && after.action.type.startsWith("knock")) {
       room.lastKnock = { playerIdx: after.action.playerIdx, card: after.action.card };
     }
+    // Cleared by default on every action — re-set below only for a plain
+    // flip, the one case flip priority actually applies to (see tapCard).
+    room.flipPriorityIdx = null;
     if (after.winnerIndex !== null && after.winnerIndex !== undefined) {
       room.status = "round-over";
       const potAmount = room.potAmount;
@@ -445,6 +457,10 @@ class RoomManager {
       );
     } else {
       room.lastTargetAt = Date.now();
+      // The flipper gets first right to knock the card they just revealed
+      // — see tapCard's cooldown check — before it opens up to everyone
+      // else once KNOCK_COOLDOWN_MS passes, same as always.
+      room.flipPriorityIdx = after.action.playerIdx;
       this.addLog(room, `${actingPlayer.name} had no match, tapped the deck, and flipped ${after.faceUpCard.rank} of ${after.faceUpCard.suit}.`);
     }
     return room;
@@ -456,10 +472,13 @@ class RoomManager {
    * whose flip-turn it is, though only once KNOCK_COOLDOWN_MS has passed
    * since the current target first appeared (enforced globally per room,
    * not per player) — so the fastest tapper can't claim a card before
-   * everyone else has had a chance to actually see it. `expectedTargetId`
-   * (the target card's id the client last saw) is optional but lets the
-   * engine give a friendlier "someone already matched that" message if
-   * this tap lost a race.
+   * everyone else has had a chance to actually see it. The one exception:
+   * whoever just flipped this specific card (room.flipPriorityIdx) may
+   * knock it immediately, without waiting out that cooldown themselves —
+   * they get first right to decide whether they want it before anyone
+   * else even gets a look in. `expectedTargetId` (the target card's id the
+   * client last saw) is optional but lets the engine give a friendlier
+   * "someone already matched that" message if this tap lost a race.
    */
   tapCard(code, socketId, cardId, expectedTargetId) {
     const { room, playerIdx, player } = this._validateActivePlayer(code, socketId);
@@ -467,7 +486,9 @@ class RoomManager {
     // check: there's genuinely nothing to knock yet while a placement is
     // pending, so that should never be misreported as "too soon."
     this._checkNoPendingPlacement(room);
-    this._checkCooldown(room.lastTargetAt, KNOCK_COOLDOWN_MS, "Give everyone a moment to see the card — try again in a second.");
+    if (playerIdx !== room.flipPriorityIdx) {
+      this._checkCooldown(room.lastTargetAt, KNOCK_COOLDOWN_MS, "Give everyone a moment to see the card — try again in a second.");
+    }
     const after = engine.attemptKnock(room.round, playerIdx, cardId, expectedTargetId);
     return this._applyTurnResult(room, player, after);
   }
@@ -567,6 +588,12 @@ class RoomManager {
             turnIndex: room.round.turnIndex ?? null,
             winnerIndex: room.round.winnerIndex ?? null,
             pendingPlacement: room.round.pendingPlacement ?? null,
+            // Set only when the current target came from a manual flip —
+            // that player may knock it immediately, ahead of everyone
+            // else's usual KNOCK_COOLDOWN_MS wait (see tapCard). Lets the
+            // client enable their tap right away instead of showing a
+            // countdown that wouldn't actually be blocking them.
+            flipPriorityIdx: room.flipPriorityIdx ?? null,
             deckCount: room.round.deck ? room.round.deck.length : 0,
             tablePileCount: room.round.tablePile ? room.round.tablePile.length : 0,
             // Every card a player has knocked away this round — already
