@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getSocket, emitWithAck } from "../socket";
+import { notify } from "../confirm";
 import GradientButton from "../components/GradientButton";
 import Logo from "../components/Logo";
 import { centeredContent } from "../responsive";
@@ -100,7 +101,15 @@ export default function HomeScreen({ onEnterRoom }) {
       persist({ serverUrl, playerName });
       onEnterRoom({ socket, code: res.code, playerName, serverUrl, initialRoomState: await initialRoomState });
     } catch (e) {
-      setError(e.message || "Could not join room. Check the code and server address.");
+      const message = e.message || "Could not join room. Check the code and server address.";
+      setError(message);
+      // A room being full isn't something a quick glance at inline form
+      // text reliably catches — it reads too much like any other typo
+      // error. A real alert makes it unmistakable that THIS is why they
+      // can't get in, not a mistyped code or name.
+      if (/Room is full/.test(message)) {
+        notify("Table full", message);
+      }
     } finally {
       setBusy(false);
     }
