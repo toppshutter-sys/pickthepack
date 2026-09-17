@@ -87,16 +87,20 @@ function formatMoney(n) {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
 }
 
-function formatNet(n) {
-  if (n > 0) return `+$${formatMoney(n)}`;
-  if (n < 0) return `-$${formatMoney(Math.abs(n))}`;
-  return "$0";
-}
-
-function formatDelta(n) {
+// Shared by formatNet and formatDelta below — null for zero, since the two
+// callers want different things there ("$0" vs nothing shown at all).
+function formatSigned(n) {
   if (n > 0) return `+$${formatMoney(n)}`;
   if (n < 0) return `-$${formatMoney(Math.abs(n))}`;
   return null;
+}
+
+function formatNet(n) {
+  return formatSigned(n) || "$0";
+}
+
+function formatDelta(n) {
+  return formatSigned(n);
 }
 
 function netPillBorderColor(n) {
@@ -203,9 +207,16 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
   // this particular round (e.g. disconnected before ante was collected).
   function roundDeltaFor(playerIdx) {
     const player = players[playerIdx];
-    if (!player) return null;
+    // joinRoom allows joining right as a round ends (round-over), but it
+    // never extends round.hands to fit the new seat — their index is
+    // genuinely out of bounds until the next deal resizes it. That's the
+    // signal a player was actually dealt into the round that just
+    // resolved, vs. one who joined afterward and never anted a cent into
+    // it — without this check, a newcomer would see a fabricated "-$X
+    // this round" loss for a round they never played.
+    if (!player || !round || round.hands[playerIdx] === undefined) return null;
     if (roomState.status === "awaiting-recast") {
-      if (!round || round.wonAmount === undefined || round.wonAmount === null) return null;
+      if (round.wonAmount === undefined || round.wonAmount === null) return null;
       if (playerIdx === roomState.dealerIndex) return round.wonAmount;
       return player.connected ? -packAmount : null;
     }

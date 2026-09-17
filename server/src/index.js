@@ -117,14 +117,18 @@ io.on("connection", (socket) => {
         io.to(b.socketId).emit("booted", { reason: "Your balance can't cover this table's ante anymore." });
       }
       const roomAfterBoot = rooms.rooms.get(code);
-      if (!roomAfterBoot || roomAfterBoot.players.length < 2) {
-        // Booting may have dropped the table below 2 players — nothing
-        // left to deal. Reflect whatever's left (if anything) rather than
-        // surfacing a "need at least 2 players" error nobody asked for.
+      if (roomAfterBoot && roomAfterBoot.players.length < 2) {
+        // Booting dropped the table below 2 players — nothing left to
+        // deal, but the room itself is still real. Reflect its new state
+        // rather than surfacing a "need at least 2 players" error nobody
+        // asked for.
         ack && ack({ ok: true });
-        if (roomAfterBoot) rooms.broadcastState(roomAfterBoot, io);
+        rooms.broadcastState(roomAfterBoot, io);
         return;
       }
+      // No room at all (bad/stale code, or the server lost its in-memory
+      // state) — let startRound throw its own "Room not found" below,
+      // same as it always has, instead of silently acking ok:true.
       const room = rooms.startRound(code, socket.id);
       ack && ack({ ok: true });
       rooms.broadcastState(room, io);

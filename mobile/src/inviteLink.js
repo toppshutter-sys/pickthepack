@@ -5,7 +5,7 @@ import * as Clipboard from "expo-clipboard";
 // window.location (native/Expo Go). On web, window.location.origin is used
 // instead so a locally-run or LAN copy of the app shares a link that
 // actually points back at itself, not always the production URL.
-const FALLBACK_BASE_URL = "https://pickthepack.onrender.com";
+const FALLBACK_BASE_URL = "https://pick-the-pack-server.onrender.com";
 
 /** A link that, opened in any browser, loads the app with the room code pre-filled. */
 export function buildInviteLink(code) {

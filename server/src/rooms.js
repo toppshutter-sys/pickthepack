@@ -70,7 +70,7 @@ class RoomManager {
       code,
       packAmount, // 5 or 10
       players: [
-        { id: hostSocketId, name: hostName, connected: true, totalContributed: 0, totalWon: 0, isHost: true },
+        { id: hostSocketId, name: hostName, connected: true, totalContributed: 0, totalWon: 0 },
       ],
       potAmount: 0,
       dealerIndex: 0,
@@ -113,7 +113,7 @@ class RoomManager {
     if (room.players.some((p) => p.name.toLowerCase() === playerName.toLowerCase())) {
       throw new Error(`"${playerName}" is already at this table — enter a different name`);
     }
-    room.players.push({ id: socketId, name: playerName, connected: true, totalContributed: 0, totalWon: 0, isHost: false });
+    room.players.push({ id: socketId, name: playerName, connected: true, totalContributed: 0, totalWon: 0 });
     return room;
   }
 
