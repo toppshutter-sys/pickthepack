@@ -288,10 +288,138 @@ test("recastBet: the last holdout disconnecting resolves the wait automatically"
   // Cy is the only holdout — disconnecting them (instead of recasting)
   // should resolve the round rather than leaving it stuck forever (it
   // may legitimately land on a fresh dealer-card-win cycle instead).
-  const after = rooms.markDisconnected("s2");
+  const { room: after } = rooms.markDisconnected("s2");
   if (after.status === "awaiting-recast") {
     assert.equal(after.recastReady.size, 0, "fresh cycle, not still stuck waiting on this one");
   }
+});
+
+/** Re-deals until a round resolves outright (instant win or dealer's-card win having already recast through) into round-over. */
+function forceRoundOver(rooms, room) {
+  let r;
+  do {
+    // This loop discards a "round-active" attempt wholesale and just
+    // redeals — no matching-phase play is simulated — but startRound
+    // still antes on every single attempt, not just the one that finally
+    // sticks. Reset financials before each try, or a run of bad luck can
+    // inflate totalContributed far past what a genuine round ever would,
+    // tripping the ante-eligibility check (see bootIneligiblePlayers) on
+    // a player who never actually got charged more than once for real.
+    room.potAmount = 0;
+    for (const p of room.players) {
+      p.totalContributed = 0;
+      p.totalWon = 0;
+    }
+    r = rooms.startRound(room.code);
+  } while (r.status !== "round-over");
+  return r;
+}
+
+test("readyForNextRound: the next round only deals once every connected player has readied up", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  forceRoundOver(rooms, room);
+  const contributedBefore = room.players.map((p) => p.totalContributed);
+
+  let { room: after } = rooms.readyForNextRound(room.code, "s0");
+  assert.equal(after.status, "round-over", "still waiting on Bo and Cy");
+  ({ room: after } = rooms.readyForNextRound(room.code, "s1"));
+  assert.equal(after.status, "round-over", "still waiting on Cy");
+  ({ room: after } = rooms.readyForNextRound(room.code, "s2"));
+  // Everyone's readied up now — a fresh hand should have dealt. Checked
+  // via ante collection, not `status !== "round-over"` — the fresh deal
+  // can itself land right back on an instant win (a real, ~1-in-5-ish
+  // outcome, not a bug), which would make that assertion flaky.
+  after.players.forEach((p, i) => {
+    assert.equal(p.totalContributed, contributedBefore[i] + room.packAmount);
+  });
+});
+
+test("readyForNextRound: ante is collected from everyone once the next round deals", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  forceRoundOver(rooms, room);
+  const contributedBefore = room.players.map((p) => p.totalContributed);
+
+  rooms.readyForNextRound(room.code, "s0");
+  rooms.readyForNextRound(room.code, "s1");
+  const { room: after } = rooms.readyForNextRound(room.code, "s2");
+
+  after.players.forEach((p, i) => {
+    assert.equal(p.totalContributed, contributedBefore[i] + room.packAmount);
+  });
+});
+
+test("readyForNextRound: rejected when the round isn't actually over", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo"]);
+  assert.throws(() => rooms.readyForNextRound(room.code, "s0"), /Nothing to ante up for right now/);
+});
+
+test("readyForNextRound: rejected for a socket not seated in the room", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  forceRoundOver(rooms, room);
+  assert.throws(() => rooms.readyForNextRound(room.code, "stranger"), /not seated/);
+});
+
+test("readyForNextRound: a disconnected player is skipped, not waited on", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  forceRoundOver(rooms, room);
+  const contributedBefore = room.players.map((p) => p.totalContributed);
+  rooms.markDisconnected("s2"); // Cy vanishes instead of anteing up
+  rooms.readyForNextRound(room.code, "s0");
+  const { room: after } = rooms.readyForNextRound(room.code, "s1");
+  // Only Ann and Bo needed to ready up — Cy being disconnected shouldn't
+  // block progress. Checked via ante collection, not `status !==
+  // "round-over"` — the fresh deal can itself land right back on an
+  // instant win (a real, ~1-in-5-ish outcome, not a bug), which would
+  // make that assertion flaky.
+  assert.equal(after.players[0].totalContributed, contributedBefore[0] + room.packAmount);
+  assert.equal(after.players[1].totalContributed, contributedBefore[1] + room.packAmount);
+});
+
+test("readyForNextRound: the last holdout disconnecting resolves the wait automatically", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  forceRoundOver(rooms, room);
+  const contributedBefore = room.players.map((p) => p.totalContributed);
+  rooms.readyForNextRound(room.code, "s0");
+  rooms.readyForNextRound(room.code, "s1");
+  // Cy is the only holdout — disconnecting them (instead of anteing up)
+  // should resolve the wait rather than leaving it stuck forever. Same
+  // ante-collection check as above, for the same reason.
+  const { room: after } = rooms.markDisconnected("s2");
+  assert.equal(after.players[0].totalContributed, contributedBefore[0] + room.packAmount);
+  assert.equal(after.players[1].totalContributed, contributedBefore[1] + room.packAmount);
+});
+
+test("readyForNextRound: a player who can no longer afford the ante is booted before the next deal", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  forceRoundOver(rooms, room);
+  const bo = room.players.find((p) => p.name === "Bo");
+  // Bo may have won the forced round (forceRoundOver doesn't control who
+  // wins) — reset totalWon too, or a large enough win could offset this
+  // override and leave Bo eligible after all.
+  bo.totalWon = 0;
+  bo.totalContributed = STARTING_BALANCE - 4; // net = 50 + 0 - 46 = 4, can't cover the $5 ante
+
+  rooms.readyForNextRound(room.code, "s0");
+  const { room: after, booted } = rooms.readyForNextRound(room.code, "s2");
+  assert.deepEqual(booted, [{ socketId: "s1", name: "Bo" }]);
+  assert.deepEqual(after.players.map((p) => p.name), ["Ann", "Cy"]);
+});
+
+test("toPlayerState: exposes nextRoundReady the same shape as recastReady", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  forceRoundOver(rooms, room);
+  const state = rooms.toPlayerState(room, "s0");
+  // 3 players, only one of whom (Ann) has readied up here — with a 3rd
+  // player in the mix, one confirmation can never complete the wait on
+  // its own, so this can't land on the same "already dealt/booted before
+  // we got to look" ambiguity a 2-player table risks (forceRoundOver's
+  // own redeal loop collects ante on every failed attempt, same as a
+  // real round would — with enough retries that alone can legitimately
+  // exhaust STARTING_BALANCE, which is a real, expected interaction with
+  // the eligibility check, not a bug in either).
+  assert.deepEqual(state.round.nextRoundReady, [false, false, false]);
+  rooms.readyForNextRound(room.code, "s0");
+  assert.deepEqual(rooms.toPlayerState(room, "s0").round.nextRoundReady, [true, false, false]);
 });
 
 test("leaveRoom: rejected during awaiting-recast — same load-bearing-indices reasoning as round-active", () => {

@@ -724,16 +724,38 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
         </Text>
       )}
 
-      {(isInstantWin || isRoundOver) &&
-        (you === roomState.dealerIndex ? (
-          <GradientButton onPress={() => act("start-round")} disabled={busy} style={styles.actionButton}>
-            {busy ? "…" : `Deal Next Round ($${packAmount} ante)`}
-          </GradientButton>
-        ) : (
-          <Text style={styles.waitingText}>
-            Waiting for {players[roomState.dealerIndex].name} — winner of the last round — to deal the next one
-          </Text>
-        ))}
+      {(isInstantWin || isRoundOver) && (
+        <>
+          {/* Every player individually antes up or leaves — nobody else
+              decides this for them. Same "everyone explicitly opts in"
+              pattern as the dealer's-card recast screen above, just for
+              the round-over case (see readyForNextRound in rooms.js). */}
+          <View style={styles.playerList}>
+            {players.map((p, i) => (
+              <GlassPanel key={i} style={styles.recastRow}>
+                <View style={styles.recastNameCol}>
+                  <Text style={styles.recastName}>
+                    {p.name}
+                    {i === you ? " (you)" : ""}
+                  </Text>
+                  <NetPill player={p} delta={roundDeltaFor(i)} startingBalance={roomState.startingBalance} />
+                </View>
+                <Text style={round.nextRoundReady && round.nextRoundReady[i] ? styles.recastDone : styles.recastPending}>
+                  {round.nextRoundReady && round.nextRoundReady[i] ? "✓ anted up" : p.connected ? "waiting…" : "disconnected"}
+                </Text>
+              </GlassPanel>
+            ))}
+          </View>
+
+          {round.nextRoundReady && round.nextRoundReady[you] ? (
+            <Text style={styles.waitingText}>Waiting for everyone else to ante up…</Text>
+          ) : (
+            <GradientButton onPress={() => act("ready-for-next-round")} disabled={busy} style={styles.actionButton}>
+              {busy ? "…" : `Ante Up $${packAmount}`}
+            </GradientButton>
+          )}
+        </>
+      )}
     </ScrollView>
   );
 }

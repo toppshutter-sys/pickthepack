@@ -249,13 +249,17 @@ class RoomManager {
 
   markDisconnected(socketId) {
     const room = this.findRoomBySocket(socketId);
-    if (!room) return null;
+    if (!room) return { room: null, booted: [] };
     const player = room.players.find((p) => p.id === socketId);
     if (player) player.connected = false;
-    // If everyone else had already recast and this was the last holdout,
-    // their disconnecting shouldn't leave the table stuck waiting forever.
+    // If everyone else had already recast/readied-up and this was the
+    // last holdout, their disconnecting shouldn't leave the table stuck
+    // waiting forever — one or the other is ever actually relevant at a
+    // time (a room is never in both awaiting-recast and round-over), so
+    // both being called unconditionally here is harmless.
     this._maybeResolveRecast(room);
-    return room;
+    const booted = this._maybeStartNextRound(room);
+    return { room, booted };
   }
 
   addLog(room, message) {
@@ -301,6 +305,64 @@ class RoomManager {
     this._collectAnte(room);
     this._resolveTarget(room, hands, deck);
     return room;
+  }
+
+  /**
+   * A player confirms they want to ante up and continue for the next
+   * round, once the current one is over — the round-over equivalent of
+   * recastBet, and replaces the old "only the winner decides for
+   * everyone" model with the same "everyone explicitly opts in, or
+   * leaves instead" pattern already used for a dealer's-card recast.
+   * Once every still-connected player has confirmed, a fresh hand deals
+   * automatically (see _maybeStartNextRound) — nobody needs to separately
+   * tap a "deal" button on top of this.
+   */
+  readyForNextRound(code, socketId) {
+    const room = this.rooms.get(code);
+    if (!room) throw new Error("Room not found");
+    if (room.status !== "round-over") throw new Error("Nothing to ante up for right now");
+    const player = room.players.find((p) => p.id === socketId);
+    if (!player) throw new Error("You're not seated in this room");
+    if (!player.connected) throw new Error("You're disconnected");
+
+    room.nextRoundReady.add(socketId);
+    const booted = this._maybeStartNextRound(room);
+    return { room, booted };
+  }
+
+  /**
+   * Once every still-connected, still-eligible player has confirmed
+   * readyForNextRound, boots anyone who can no longer afford the ante
+   * (see bootIneligiblePlayers — same eligibility check startRound's
+   * caller runs, just triggered here instead since there's no single
+   * "deal" tap anymore) and deals a fresh hand. A connected player who
+   * can't actually afford this table's ante is excluded from "still
+   * waiting" — they're about to be booted regardless, so the rest of the
+   * table shouldn't be stuck waiting on a confirmation from someone who
+   * has no real choice left to confirm. Returns the array of booted
+   * players (see bootIneligiblePlayers) so the caller can notify them
+   * directly.
+   */
+  _maybeStartNextRound(room) {
+    if (room.status !== "round-over") return [];
+    const stillWaiting = room.players.some(
+      (p) => p.connected && this._netFor(p) >= room.packAmount && !room.nextRoundReady.has(p.id)
+    );
+    if (stillWaiting) return [];
+
+    const booted = this.bootIneligiblePlayers(room.code);
+    // bootIneligiblePlayers may have deleted the room entirely, or dropped
+    // it below 2 players (reset to lobby) — either way, there's nothing
+    // left here to deal.
+    if (!this.rooms.has(room.code) || room.status !== "round-over") return booted;
+
+    room.nextRoundReady = new Set();
+    room.lastKnock = null;
+    room.flipPriorityIdx = null;
+    const { hands, deck } = engine.dealHands(room.players.length);
+    this._collectAnte(room);
+    this._resolveTarget(room, hands, deck);
+    return booted;
   }
 
   /**
@@ -363,6 +425,7 @@ class RoomManager {
 
     if (result.phase === "instant-win") {
       room.status = "round-over";
+      room.nextRoundReady = new Set();
       const potAmount = room.potAmount;
       const winners = result.winnerIndices;
       const share = potAmount / winners.length;
@@ -423,6 +486,7 @@ class RoomManager {
     room.flipPriorityIdx = null;
     if (after.winnerIndex !== null && after.winnerIndex !== undefined) {
       room.status = "round-over";
+      room.nextRoundReady = new Set();
       const potAmount = room.potAmount;
       room.players[after.winnerIndex].totalWon += potAmount;
       const winnerName = room.players[after.winnerIndex].name;
@@ -608,6 +672,9 @@ class RoomManager {
               : null,
             wonAmount: room.round.wonAmount ?? null,
             recastReady: room.recastReady ? room.players.map((p) => room.recastReady.has(p.id)) : null,
+            // Same shape as recastReady, for the round-over equivalent —
+            // see readyForNextRound.
+            nextRoundReady: room.nextRoundReady ? room.players.map((p) => room.nextRoundReady.has(p.id)) : null,
             // Client-side timestamps (not durations) so clock-drift- and
             // latency-tolerant countdowns can be shown — the server remains
             // the actual authority via tapDeck/tapCard's own cooldown checks.

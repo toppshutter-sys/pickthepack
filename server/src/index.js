@@ -99,8 +99,11 @@ io.on("connection", (socket) => {
     })
   );
 
-  // Used both to deal the first hand from the lobby and for "Play Again"
-  // after a round resolves.
+  // Deals the very first hand from the lobby, before anyone's won
+  // anything yet — anyone seated may trigger it. Continuing after a round
+  // ends instead goes through ready-for-next-round below, which requires
+  // every player to individually opt in (or leave), not just one player
+  // deciding for the whole table.
   socket.on(
     "start-round",
     safeHandler(socket, ({ code }, ack) => {
@@ -134,6 +137,23 @@ io.on("connection", (socket) => {
     "recast-bet",
     safeHandler(socket, ({ code }, ack) => {
       const room = rooms.recastBet(code, socket.id);
+      ack && ack({ ok: true });
+      rooms.broadcastState(room, io);
+    })
+  );
+
+  // Once a round ends, every player individually confirms they want to
+  // ante up and continue (or leaves instead, via the ordinary leave-room
+  // flow) — the next hand deals automatically once everyone still
+  // connected has done this, same "everyone opts in" pattern recast-bet
+  // already uses for a dealer's-card win.
+  socket.on(
+    "ready-for-next-round",
+    safeHandler(socket, ({ code }, ack) => {
+      const { room, booted } = rooms.readyForNextRound(code, socket.id);
+      for (const b of booted) {
+        io.to(b.socketId).emit("booted", { reason: "Your balance can't cover this table's ante anymore." });
+      }
       ack && ack({ ok: true });
       rooms.broadcastState(room, io);
     })
@@ -176,7 +196,10 @@ io.on("connection", (socket) => {
   );
 
   socket.on("disconnect", () => {
-    const room = rooms.markDisconnected(socket.id);
+    const { room, booted } = rooms.markDisconnected(socket.id);
+    for (const b of booted) {
+      io.to(b.socketId).emit("booted", { reason: "Your balance can't cover this table's ante anymore." });
+    }
     if (room) rooms.broadcastState(room, io);
   });
 });
