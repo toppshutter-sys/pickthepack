@@ -106,9 +106,11 @@ export default function HomeScreen({ onEnterRoom }) {
       // A room being full isn't something a quick glance at inline form
       // text reliably catches — it reads too much like any other typo
       // error. A real alert makes it unmistakable that THIS is why they
-      // can't get in, not a mistyped code or name.
+      // can't get in, not a mistyped code or name — and spells out what
+      // to actually do about it (there's nothing to retry here; a seat
+      // has to open up first).
       if (/Room is full/.test(message)) {
-        notify("Table full", message);
+        notify("Table full", "This table already has 6 players. You'll need to wait until a seat opens up before you can join.");
       }
     } finally {
       setBusy(false);
