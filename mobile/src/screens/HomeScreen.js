@@ -15,6 +15,7 @@ import { getSocket, emitWithAck } from "../socket";
 import { notify } from "../confirm";
 import GradientButton from "../components/GradientButton";
 import Logo from "../components/Logo";
+import InstallPrompt from "../components/InstallPrompt";
 import { centeredContent } from "../responsive";
 import { colors } from "../theme";
 
@@ -28,6 +29,7 @@ export default function HomeScreen({ onEnterRoom }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [showServerField, setShowServerField] = useState(false);
+  const [cameFromInvite, setCameFromInvite] = useState(false);
 
   const fadeIn = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -55,6 +57,7 @@ export default function HomeScreen({ onEnterRoom }) {
     const codeParam = params.get("code");
     if (codeParam) {
       setJoinCode(codeParam.toUpperCase());
+      setCameFromInvite(true);
       // Clean the URL so refreshing or re-sharing it doesn't repeat/stick.
       window.history.replaceState({}, "", window.location.pathname);
     }
@@ -128,6 +131,10 @@ export default function HomeScreen({ onEnterRoom }) {
           <Text style={styles.welcome}>Welcome! 🌴</Text>
           <Text style={styles.subtitle}>Choose your pack, join the table.</Text>
         </Animated.View>
+
+        {/* Only for someone who arrived via a shared invite link — they're
+            the ones most likely to want the app on their home screen. */}
+        {cameFromInvite ? <InstallPrompt /> : null}
 
         {showServerField ? (
           <>

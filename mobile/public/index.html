@@ -39,6 +39,21 @@
     </noscript>
     <div id="root"></div>
     <script>
+      // Chrome/Edge/Android fire beforeinstallprompt once, early — often
+      // before the React app has mounted — so it's captured here and handed
+      // to InstallPrompt (src/components/InstallPrompt.js) instead of
+      // being lost if nothing was listening yet.
+      window.addEventListener("beforeinstallprompt", (e) => {
+        e.preventDefault();
+        window.__pwaInstallPrompt = e;
+        window.dispatchEvent(new Event("pwa-install-available"));
+      });
+      window.addEventListener("appinstalled", () => {
+        window.__pwaInstallPrompt = null;
+        window.dispatchEvent(new Event("pwa-installed"));
+      });
+    </script>
+    <script>
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", () => {
           navigator.serviceWorker.register("/sw.js").catch(() => {});
