@@ -608,6 +608,17 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
         />
       )}
 
+      {/* Whose turn it is, stated outright — the gold name on an opponent's
+          seat and the small hint line at the bottom were easy to miss. */}
+      {!isInstantWin && !isRoundOver && (
+        <TurnBanner
+          turnKey={placementPending ? `place-${pendingPlacement}` : `flip-${round.turnIndex}`}
+          isMe={placementPending ? isMyPendingPlacement : isMyFlipTurn}
+          playerName={players[placementPending ? pendingPlacement : round.turnIndex].name}
+          kind={placementPending ? "place" : "flip"}
+        />
+      )}
+
       {/* Between-rounds only — never shown while a round is actively in
           progress, so it can't clutter the live table layout. */}
       {(isInstantWin || isRoundOver) && <RoundHistoryPanel history={roomState.history} />}
@@ -771,6 +782,43 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
   );
 }
 
+/**
+ * States whose turn it is: either to flip the deck (when nobody has a match)
+ * or, after a knock leaves someone with 2+ cards, to place their next target.
+ * Pops in fresh whenever the turn changes hands; the viewer's own turn gets
+ * the gold treatment so it's unmistakable without reading the name.
+ */
+function TurnBanner({ turnKey, isMe, playerName, kind }) {
+  const enter = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    enter.setValue(0);
+    Animated.spring(enter, { toValue: 1, useNativeDriver: true, speed: 16, bounciness: 8 }).start();
+  }, [turnKey]);
+
+  const title = isMe
+    ? kind === "place" ? "🃏 Your turn — place a new target card" : "🎯 It's your turn!"
+    : kind === "place" ? `🃏 It's ${playerName}'s turn — placing a new target` : `⏳ It's ${playerName}'s turn`;
+  const sub = isMe
+    ? kind === "place" ? "Tap a card from your hand" : "Tap the deck to flip if nobody's matched"
+    : kind === "place" ? null : "They flip the deck if nobody matches";
+
+  return (
+    <Animated.View
+      style={{
+        opacity: enter,
+        transform: [{ scale: enter.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1] }) }],
+        width: "100%",
+        marginBottom: 12,
+      }}
+    >
+      <GlassPanel style={styles.turnBanner} borderColor={isMe ? colors.sunGold : colors.aquaDim}>
+        <Text style={[styles.turnBannerTitle, isMe && styles.turnBannerTitleMe]}>{title}</Text>
+        {sub ? <Text style={styles.turnBannerSub}>{sub}</Text> : null}
+      </GlassPanel>
+    </Animated.View>
+  );
+}
+
 /** A clear, dedicated callout for the most recent knock — pops in fresh each time. */
 function KnockBanner({ playerName, card }) {
   const enter = useRef(new Animated.Value(0)).current;
@@ -840,6 +888,10 @@ const styles = StyleSheet.create({
   },
   winnerTitle: { color: "#2a1a0a", fontWeight: "800", fontSize: 17, textAlign: "center" },
   winnerCategory: { color: "#4a2f14", fontSize: 13, marginTop: 4 },
+  turnBanner: { paddingVertical: 10, paddingHorizontal: 14, alignItems: "center" },
+  turnBannerTitle: { color: colors.textPrimary, fontWeight: "700", fontSize: 14, textAlign: "center" },
+  turnBannerTitleMe: { color: colors.sunGold, fontWeight: "800", fontSize: 16 },
+  turnBannerSub: { color: colors.textMuted, fontSize: 12, marginTop: 3, textAlign: "center" },
   knockBanner: { paddingVertical: 10, paddingHorizontal: 14, alignItems: "center" },
   knockText: { color: colors.sunGold, fontWeight: "700", fontSize: 13 },
   dealerCardBanner: {
