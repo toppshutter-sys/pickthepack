@@ -29,7 +29,6 @@ export default function HomeScreen({ onEnterRoom }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [showServerField, setShowServerField] = useState(false);
-  const [cameFromInvite, setCameFromInvite] = useState(false);
 
   const fadeIn = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -57,7 +56,6 @@ export default function HomeScreen({ onEnterRoom }) {
     const codeParam = params.get("code");
     if (codeParam) {
       setJoinCode(codeParam.toUpperCase());
-      setCameFromInvite(true);
       // Clean the URL so refreshing or re-sharing it doesn't repeat/stick.
       window.history.replaceState({}, "", window.location.pathname);
     }
@@ -132,9 +130,16 @@ export default function HomeScreen({ onEnterRoom }) {
           <Text style={styles.subtitle}>Choose your pack, join the table.</Text>
         </Animated.View>
 
-        {/* Only for someone who arrived via a shared invite link — they're
-            the ones most likely to want the app on their home screen. */}
-        {cameFromInvite ? <InstallPrompt /> : null}
+        {/* index.html's beforeinstallprompt listener suppresses the
+            browser's own native install UI unconditionally, for every
+            visitor — not just invite-link arrivals — so this has to be
+            unconditional too, or a host who creates a table (or anyone who
+            bookmarks/revisits the bare URL) loses the install affordance
+            entirely instead of getting this substitute for it. Safe to
+            always mount: InstallPrompt's own logic already hides itself
+            when already installed, already dismissed, or the browser
+            offers no way to install. */}
+        <InstallPrompt />
 
         {showServerField ? (
           <>

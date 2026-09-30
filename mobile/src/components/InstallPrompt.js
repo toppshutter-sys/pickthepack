@@ -29,12 +29,16 @@ function recentlyDismissed() {
 }
 
 /**
- * "Install the app" nudge, shown to someone arriving from an invite link
- * who hasn't installed the PWA yet. Chromium browsers hand us a real
- * install prompt (captured early in public/index.html); iOS Safari has no
- * such API, so there it's a short how-to for Add to Home Screen instead.
- * Renders nothing on native builds, when already installed, when the
- * browser offers no way to install, or for a week after being dismissed.
+ * "Install the app" nudge, rendered on the home screen for anyone who
+ * hasn't installed the PWA yet — index.html's beforeinstallprompt listener
+ * suppresses the browser's own native install UI unconditionally (for
+ * every visitor, not just invite-link arrivals), so this is the ONLY
+ * install affordance anyone gets and needs to be equally unconditional.
+ * Chromium browsers hand us a real install prompt (captured early in
+ * public/index.html); iOS Safari has no such API, so there it's a short
+ * how-to for Add to Home Screen instead. Renders nothing on native builds,
+ * when already installed, when the browser offers no way to install, or
+ * for a week after being dismissed.
  */
 export default function InstallPrompt() {
   const [hasPrompt, setHasPrompt] = useState(() => typeof window !== "undefined" && !!window.__pwaInstallPrompt);
