@@ -3,6 +3,7 @@ import { StyleSheet, StatusBar, View, Animated, Easing } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { setAudioModeAsync } from "expo-audio";
+import CopyrightGate from "./src/components/CopyrightGate";
 import HomeScreen from "./src/screens/HomeScreen";
 import LobbyScreen from "./src/screens/LobbyScreen";
 import GameScreen from "./src/screens/GameScreen";
@@ -74,6 +75,12 @@ function AmbientGlow() {
 }
 
 export default function App() {
+  // Gates the whole app behind an explicit tap on first load each launch —
+  // nothing else (HomeScreen, a session, sockets) mounts until this is
+  // dismissed. Deliberately not persisted (AsyncStorage/localStorage): the
+  // notice is meant to be seen every time someone connects, not just once
+  // ever.
+  const [entered, setEntered] = useState(false);
   const [session, setSession] = useState(null); // { socket, code, playerName, serverUrl }
   const [roomState, setRoomState] = useState(null);
 
@@ -154,7 +161,9 @@ export default function App() {
   }
 
   let content;
-  if (!session || !roomState) {
+  if (!entered) {
+    content = <CopyrightGate onEnter={() => setEntered(true)} />;
+  } else if (!session || !roomState) {
     content = <HomeScreen onEnterRoom={handleEnterRoom} />;
   } else if (roomState.status === "lobby") {
     content = <LobbyScreen socket={session.socket} roomState={roomState} code={session.code} onLeaveRoom={handleLeaveRoom} />;
