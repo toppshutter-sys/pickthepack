@@ -28,7 +28,7 @@ export default function CopyrightGate({ onEnter }) {
         <Text style={styles.title}>Pick the Pack</Text>
 
         <GlassPanel style={styles.panel}>
-          <Text style={styles.noticeTitle}>© {year} Pick the Pack</Text>
+          <Text style={styles.noticeTitle}>© {year} Rosario Stanley / Visionnaire Entertainment</Text>
           <Text style={styles.noticeBody}>
             This game, including its design, artwork, and code, is protected by copyright. All
             rights reserved — no reproduction or redistribution without permission.
