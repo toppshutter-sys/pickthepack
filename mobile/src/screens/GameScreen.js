@@ -8,10 +8,12 @@ import GradientButton from "../components/GradientButton";
 import GlassPanel from "../components/GlassPanel";
 import InviteButton from "../components/InviteButton";
 import RoundHistoryPanel from "../components/RoundHistoryPanel";
+import ActivityLogPanel from "../components/ActivityLogPanel";
 import { emitWithAck } from "../socket";
 import { useSoundEnabled } from "../useSoundEnabled";
+import { isPushSupported, getExistingSubscription, subscribeToPush, unsubscribeFromPush } from "../pushNotifications";
 import { centeredContent, useScale } from "../responsive";
-import { confirmAsync } from "../confirm";
+import { confirmAsync, notify } from "../confirm";
 import { shareInvite } from "../inviteLink";
 import { colors, gradients } from "../theme";
 
@@ -178,6 +180,30 @@ function SoundToggle({ enabled, onToggle }) {
   );
 }
 
+/**
+ * Same pill treatment as SoundToggle, for the opt-in "tell me when it's my
+ * turn" push notification — only rendered at all when the browser can
+ * actually offer push (see isPushSupported in pushNotifications.js), so
+ * there's nothing to show on native builds or unsupported browsers rather
+ * than a toggle that would just fail the moment it's tapped.
+ */
+function PushToggle({ enabled, busy, onToggle }) {
+  if (!isPushSupported()) return null;
+  return (
+    <TouchableOpacity onPress={onToggle} activeOpacity={0.7} disabled={busy}>
+      <GlassPanel
+        style={styles.soundToggle}
+        radius={999}
+        borderColor={enabled ? "rgba(92,214,138,0.45)" : colors.aquaDim}
+      >
+        <Text style={[styles.soundToggleText, enabled ? styles.netTextPositive : styles.netTextZero]}>
+          {busy ? "🔔 …" : enabled ? "🔔 Notify On" : "🔕 Notify Off"}
+        </Text>
+      </GlassPanel>
+    </TouchableOpacity>
+  );
+}
+
 export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -286,6 +312,46 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
     startSound.volume = 0.3;
   }, [flipSound, knockSound, winSound, startSound]);
   const [soundEnabled, setSoundEnabled, soundEnabledRef] = useSoundEnabled();
+
+  // "It's your turn" push notifications — opt-in per room (player objects,
+  // and so their registered subscription, are recreated fresh each time
+  // someone joins a room; there's no session that carries this across
+  // rooms on its own). On mount, if the browser already has a granted
+  // subscription from an earlier visit, silently re-register it with THIS
+  // room's server rather than just assuming it still applies here.
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    getExistingSubscription().then((subscription) => {
+      if (cancelled || !subscription) return;
+      socket.emit("register-push-subscription", { code, subscription: subscription.toJSON() }, (res) => {
+        if (!cancelled && res && res.ok !== false) setPushEnabled(true);
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function togglePush() {
+    if (pushBusy) return;
+    setPushBusy(true);
+    try {
+      if (pushEnabled) {
+        await unsubscribeFromPush(socket, code);
+        setPushEnabled(false);
+      } else {
+        await subscribeToPush(socket, code);
+        setPushEnabled(true);
+      }
+    } catch (e) {
+      notify("Couldn't turn on notifications", e.message || "Something went wrong.");
+    } finally {
+      setPushBusy(false);
+    }
+  }
 
   // Card flip — only for a card actually drawn FROM THE DECK (a manual
   // flip, or a knock's own "1 card left" auto-refill), not a placed
@@ -488,6 +554,7 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
             <Text style={styles.leaveText}>Leave table</Text>
           </TouchableOpacity>
           <SoundToggle enabled={soundEnabled} onToggle={() => setSoundEnabled(!soundEnabled)} />
+          <PushToggle enabled={pushEnabled} busy={pushBusy} onToggle={togglePush} />
         </View>
 
         <LinearGradient colors={gradients.sunset} start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }} style={styles.dealerCardBanner}>
@@ -595,6 +662,7 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
           <Text style={styles.leaveText}>Leave table</Text>
         </TouchableOpacity>
         <SoundToggle enabled={soundEnabled} onToggle={() => setSoundEnabled(!soundEnabled)} />
+        <PushToggle enabled={pushEnabled} busy={pushBusy} onToggle={togglePush} />
         {isRoundOver && players.length < 6 && <InviteButton onPress={handleShare} copied={linkCopied} />}
       </View>
 
@@ -622,6 +690,7 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
       {/* Between-rounds only — never shown while a round is actively in
           progress, so it can't clutter the live table layout. */}
       {(isInstantWin || isRoundOver) && <RoundHistoryPanel history={roomState.history} />}
+      {(isInstantWin || isRoundOver) && <ActivityLogPanel log={roomState.log} />}
 
       {/* Opponents seated around the top arc of an oval table — you sit at
           the bottom (see "Your hand" below the table surface). */}

@@ -7,6 +7,7 @@ const express = require("express");
 const cors = require("cors");
 const { Server } = require("socket.io");
 const { RoomManager } = require("./rooms");
+const { VAPID_PUBLIC_KEY, sendPush } = require("./push");
 
 const PORT = process.env.PORT || 4000;
 
@@ -16,6 +17,14 @@ app.use(express.json());
 
 app.get("/health", (req, res) => {
   res.json({ ok: true, service: "pick-the-pack-server" });
+});
+
+// The VAPID public key doesn't need to be secret — it's handed to every
+// subscribing browser as part of PushManager.subscribe() anyway — so a
+// plain unauthenticated GET is fine. Fetched once, client-side, before a
+// player's first subscribe attempt.
+app.get("/push/public-key", (req, res) => {
+  res.json({ publicKey: VAPID_PUBLIC_KEY });
 });
 
 // The web build of the mobile app (produced by `npx expo export -p web`)
@@ -48,6 +57,25 @@ function safeHandler(socket, fn) {
       else socket.emit("game-error", { error: err.message });
     }
   };
+}
+
+/**
+ * Push-notifies whoever the flip-turn (or placement-turn) just passed to,
+ * if it genuinely changed and they have a subscription registered. Safe
+ * to call after every action that could possibly move the turn — see
+ * checkTurnNotification, which tracks its own "already notified for this"
+ * state so this never double-fires for the same turn.
+ */
+function notifyTurnIfChanged(room) {
+  const idx = rooms.checkTurnNotification(room);
+  if (idx === null) return;
+  const player = room.players[idx];
+  if (!player || !player.pushSubscription) return;
+  const isPlacement = room.round && room.round.pendingPlacement === idx;
+  sendPush(player.pushSubscription, {
+    title: "Pick the Pack",
+    body: isPlacement ? "Your turn — place a new target card" : "It's your turn to flip the deck!",
+  });
 }
 
 io.on("connection", (socket) => {
@@ -132,6 +160,7 @@ io.on("connection", (socket) => {
       const room = rooms.startRound(code, socket.id);
       ack && ack({ ok: true });
       rooms.broadcastState(room, io);
+      notifyTurnIfChanged(room);
     })
   );
 
@@ -143,6 +172,7 @@ io.on("connection", (socket) => {
       const room = rooms.recastBet(code, socket.id);
       ack && ack({ ok: true });
       rooms.broadcastState(room, io);
+      notifyTurnIfChanged(room);
     })
   );
 
@@ -160,6 +190,7 @@ io.on("connection", (socket) => {
       }
       ack && ack({ ok: true });
       rooms.broadcastState(room, io);
+      notifyTurnIfChanged(room);
     })
   );
 
@@ -174,6 +205,7 @@ io.on("connection", (socket) => {
       const room = rooms.tapCard(code, socket.id, cardId, targetCardId);
       ack && ack({ ok: true });
       rooms.broadcastState(room, io);
+      notifyTurnIfChanged(room);
     })
   );
 
@@ -184,6 +216,7 @@ io.on("connection", (socket) => {
       const room = rooms.tapDeck(code, socket.id);
       ack && ack({ ok: true });
       rooms.broadcastState(room, io);
+      notifyTurnIfChanged(room);
     })
   );
 
@@ -196,6 +229,29 @@ io.on("connection", (socket) => {
       const room = rooms.placeTarget(code, socket.id, cardId);
       ack && ack({ ok: true });
       rooms.broadcastState(room, io);
+      notifyTurnIfChanged(room);
+    })
+  );
+
+  // Registers/clears this player's web-push subscription for "it's your
+  // turn" notifications — opt-in, toggled client-side (see GameScreen's
+  // sound-toggle-style control).
+  socket.on(
+    "register-push-subscription",
+    safeHandler(socket, ({ code, subscription }, ack) => {
+      // Not broadcast — pushSubscription is never part of toPlayerState's
+      // player payload (deliberately an explicit allowlist, not a spread),
+      // so nothing client-visible actually changes here.
+      rooms.registerPushSubscription(code, socket.id, subscription);
+      ack && ack({ ok: true });
+    })
+  );
+
+  socket.on(
+    "unregister-push-subscription",
+    safeHandler(socket, ({ code }, ack) => {
+      rooms.unregisterPushSubscription(code, socket.id);
+      ack && ack({ ok: true });
     })
   );
 

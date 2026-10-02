@@ -89,6 +89,13 @@ class RoomManager {
       // see tapCard. Cleared the moment the target changes again, so it
       // never lingers onto a card the flipper didn't actually reveal.
       flipPriorityIdx: null,
+      // The last "whose turn" key a push notification was sent for (see
+      // checkTurnNotification) — null whenever there's no active round.
+      // Prevents re-notifying the same player for the same turn across
+      // the several broadcasts one action can trigger, without needing to
+      // thread an explicit "did the turn just change" flag through every
+      // caller.
+      lastTurnKey: null,
     };
     this.rooms.set(code, room);
     return room;
@@ -215,6 +222,65 @@ class RoomManager {
       this.addLog(room, `${room.players[0].name} is the only one left — waiting for more players.`);
     }
     return booted;
+  }
+
+  /**
+   * Stores (or replaces) one player's push subscription — the browser-
+   * issued object web-push needs to reach their device, obtained via
+   * PushManager.subscribe() client-side. Kept on the player object itself
+   * so it naturally disappears whenever they do (leaveRoom, booted, the
+   * room resetting) without any separate cleanup path.
+   */
+  registerPushSubscription(code, socketId, subscription) {
+    const room = this.rooms.get(code);
+    if (!room) throw new Error("Room not found");
+    const player = room.players.find((p) => p.id === socketId);
+    if (!player) throw new Error("You're not seated in this room");
+    player.pushSubscription = subscription;
+    return room;
+  }
+
+  /** The opt-out half of registerPushSubscription — called when a player turns the toggle back off. */
+  unregisterPushSubscription(code, socketId) {
+    const room = this.rooms.get(code);
+    if (!room) throw new Error("Room not found");
+    const player = room.players.find((p) => p.id === socketId);
+    if (!player) throw new Error("You're not seated in this room");
+    player.pushSubscription = null;
+    return room;
+  }
+
+  /**
+   * Whose turn it currently is to act, as a short string key — the flip-
+   * turn holder, or whoever's on the hook to place a new target after a
+   * knock left them with 2+ cards. Null whenever there's no live round to
+   * have a "turn" in at all (mirrors the client's own TurnBanner key in
+   * GameScreen.js).
+   */
+  _turnKeyFor(room) {
+    if (!room.round || room.status !== "round-active") return null;
+    const { pendingPlacement, turnIndex } = room.round;
+    if (pendingPlacement !== null && pendingPlacement !== undefined) return `place-${pendingPlacement}`;
+    return `flip-${turnIndex}`;
+  }
+
+  /**
+   * Called after any action that could change whose turn it is (a knock, a
+   * flip, a placement, or a fresh deal). Compares the current turn key
+   * against the last one this room was checked against — if it's
+   * genuinely different, updates the stored key and returns the index of
+   * the player who should be push-notified; otherwise returns null. Safe
+   * to call after every single action, including ones that didn't change
+   * the turn at all, without ever double-notifying the same player for
+   * the same turn.
+   */
+  checkTurnNotification(room) {
+    const key = this._turnKeyFor(room);
+    if (key === room.lastTurnKey) return null;
+    room.lastTurnKey = key;
+    if (!key) return null;
+    const idx = key.startsWith("place-") ? Number(key.slice(6)) : Number(key.slice(5));
+    return Number.isInteger(idx) ? idx : null;
   }
 
   /**

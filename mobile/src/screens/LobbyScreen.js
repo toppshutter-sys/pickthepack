@@ -5,6 +5,8 @@ import GradientButton from "../components/GradientButton";
 import GlassPanel from "../components/GlassPanel";
 import InviteButton from "../components/InviteButton";
 import RoundHistoryPanel from "../components/RoundHistoryPanel";
+import ActivityLogPanel from "../components/ActivityLogPanel";
+import RulesModal from "../components/RulesModal";
 import { centeredContent } from "../responsive";
 import { confirmAsync } from "../confirm";
 import { shareInvite } from "../inviteLink";
@@ -14,6 +16,7 @@ export default function LobbyScreen({ socket, roomState, code, onLeaveRoom }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [showRules, setShowRules] = useState(false);
 
   const fadeIn = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -99,7 +102,13 @@ export default function LobbyScreen({ socket, roomState, code, onLeaveRoom }) {
           table matching cards until someone matches their whole hand and takes the pot.
         </Text>
 
+        <TouchableOpacity onPress={() => setShowRules(true)} activeOpacity={0.7}>
+          <Text style={styles.rulesLink}>❓ How to Play</Text>
+        </TouchableOpacity>
+        <RulesModal visible={showRules} onClose={() => setShowRules(false)} />
+
         <RoundHistoryPanel history={roomState.history} />
+        <ActivityLogPanel log={roomState.log} />
       </Animated.View>
     </ScrollView>
   );
@@ -148,4 +157,5 @@ const styles = StyleSheet.create({
   leaveButton: { marginTop: 16 },
   leaveText: { color: colors.negative, fontSize: 14 },
   footnote: { color: colors.textMuted, fontSize: 12, marginTop: 20, textAlign: "center" },
+  rulesLink: { color: colors.sunGold, fontSize: 13, fontWeight: "700", marginTop: 12, textDecorationLine: "underline" },
 });

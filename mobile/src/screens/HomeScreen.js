@@ -16,6 +16,7 @@ import { notify } from "../confirm";
 import GradientButton from "../components/GradientButton";
 import Logo from "../components/Logo";
 import InstallPrompt from "../components/InstallPrompt";
+import RulesModal from "../components/RulesModal";
 import { centeredContent } from "../responsive";
 import { colors } from "../theme";
 
@@ -29,6 +30,7 @@ export default function HomeScreen({ onEnterRoom }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [showServerField, setShowServerField] = useState(false);
+  const [showRules, setShowRules] = useState(false);
 
   const fadeIn = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -128,7 +130,12 @@ export default function HomeScreen({ onEnterRoom }) {
           <Text style={styles.title}>Pick the Pack</Text>
           <Text style={styles.welcome}>Welcome! 🌴</Text>
           <Text style={styles.subtitle}>Choose your pack, join the table.</Text>
+          <TouchableOpacity onPress={() => setShowRules(true)} activeOpacity={0.7}>
+            <Text style={styles.rulesLink}>❓ How to Play</Text>
+          </TouchableOpacity>
         </Animated.View>
+
+        <RulesModal visible={showRules} onClose={() => setShowRules(false)} />
 
         {/* index.html's beforeinstallprompt listener suppresses the
             browser's own native install UI unconditionally, for every
@@ -254,6 +261,7 @@ const styles = StyleSheet.create({
   label: { color: colors.textPrimary, marginTop: 12, marginBottom: 4, fontWeight: "600" },
   hint: { color: colors.textMuted, fontSize: 12, marginBottom: 4 },
   advancedLink: { color: colors.textMuted, fontSize: 12, marginTop: 8, textDecorationLine: "underline" },
+  rulesLink: { color: colors.sunGold, fontSize: 13, fontWeight: "700", marginTop: 10, textDecorationLine: "underline" },
   input: {
     backgroundColor: "rgba(253,246,232,0.94)",
     borderRadius: 12,

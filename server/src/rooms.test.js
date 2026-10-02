@@ -166,6 +166,77 @@ test("bootIneligiblePlayers: unknown room returns an empty list rather than thro
   assert.deepEqual(rooms.bootIneligiblePlayers("NOPE1"), []);
 });
 
+test("registerPushSubscription: stores the subscription on the player", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo"]);
+  const sub = { endpoint: "https://example.com/push/abc", keys: { p256dh: "x", auth: "y" } };
+  rooms.registerPushSubscription(room.code, "s0", sub);
+  assert.deepEqual(room.players[0].pushSubscription, sub);
+});
+
+test("registerPushSubscription: rejected for an unknown room", () => {
+  const rooms = new RoomManager();
+  assert.throws(() => rooms.registerPushSubscription("NOPE1", "s0", {}), /Room not found/);
+});
+
+test("registerPushSubscription: rejected for a socket not seated in the room", () => {
+  const { rooms, room } = seatRoom(["Ann"]);
+  assert.throws(() => rooms.registerPushSubscription(room.code, "stranger", {}), /not seated/);
+});
+
+test("unregisterPushSubscription: clears a previously-registered subscription", () => {
+  const { rooms, room } = seatRoom(["Ann"]);
+  rooms.registerPushSubscription(room.code, "s0", { endpoint: "https://example.com/push/abc" });
+  rooms.unregisterPushSubscription(room.code, "s0");
+  assert.equal(room.players[0].pushSubscription, null);
+});
+
+test("toPlayerState: never exposes a player's pushSubscription to anyone, including themselves", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo"]);
+  rooms.registerPushSubscription(room.code, "s0", { endpoint: "https://example.com/push/abc" });
+  const state = rooms.toPlayerState(room, "s0");
+  for (const p of state.players) {
+    assert.equal(p.pushSubscription, undefined, "pushSubscription must never leave the server");
+  }
+});
+
+test("checkTurnNotification: null when there's no active round (lobby)", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo"]);
+  assert.equal(rooms.checkTurnNotification(room), null);
+});
+
+test("checkTurnNotification: returns the flip-turn player once, then null on a repeat check with no change", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  const r = forceRoundActive(rooms, room);
+  const idx = rooms.checkTurnNotification(room);
+  assert.equal(idx, r.round.turnIndex);
+  assert.equal(rooms.checkTurnNotification(room), null, "unchanged turn shouldn't notify again");
+});
+
+test("checkTurnNotification: fires again once the turn actually moves to someone else", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  const r = forceRoundActive(rooms, room);
+  rooms.checkTurnNotification(room); // consume the initial notification
+  room.lastFlipAt = Date.now() - (FLIP_COOLDOWN_MS + 100);
+  const after = rooms.tapDeck(room.code, `s${r.round.turnIndex}`);
+  if (after.status !== "round-active") return; // the flip itself resolved the round — nothing further to check
+  assert.equal(rooms.checkTurnNotification(room), after.round.turnIndex);
+});
+
+test("checkTurnNotification: the stored key is cleared once checked again after the round ends", () => {
+  // checkTurnNotification only ever updates its stored key when it's
+  // actually called (production calls it after every relevant action —
+  // see notifyTurnIfChanged in index.js — so this never gets stale
+  // there), so this checks it explicitly rather than expecting the key to
+  // spontaneously update just because the round resolved.
+  const { rooms, room } = seatRoom(["Ann", "Bo"]);
+  forceRoundActive(rooms, room);
+  rooms.checkTurnNotification(room);
+  assert.notEqual(room.lastTurnKey, null);
+  forceRoundOver(rooms, room);
+  assert.equal(rooms.checkTurnNotification(room), null, "no active round left to notify about");
+  assert.equal(room.lastTurnKey, null, "leaving round-active clears the tracked key once re-checked");
+});
+
 test("startRound: from the lobby (no winner yet), any seated player may start it", () => {
   const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
   // Any of the three socket ids should be accepted for the very first round.
