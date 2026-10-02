@@ -676,6 +676,24 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
         />
       )}
 
+      {/* Right where the winner's announced, not buried below the whole
+          table — so the decision to continue or leave is immediate. */}
+      {(isInstantWin || isRoundOver) && (
+        <View style={styles.winnerActionsRow}>
+          <GradientButton variant="secondary" onPress={handleLeave} disabled={busy} style={styles.winnerActionButton}>
+            Leave table
+          </GradientButton>
+          {!(round.nextRoundReady && round.nextRoundReady[you]) && (
+            <GradientButton onPress={() => act("ready-for-next-round")} disabled={busy} style={styles.winnerActionButton}>
+              {busy ? "…" : `Ante Up $${packAmount}`}
+            </GradientButton>
+          )}
+        </View>
+      )}
+      {(isInstantWin || isRoundOver) && round.nextRoundReady && round.nextRoundReady[you] && (
+        <Text style={styles.waitingText}>Waiting for everyone else to ante up…</Text>
+      )}
+
       {/* Whose turn it is, stated outright — the gold name on an opponent's
           seat and the small hint line at the bottom were easy to miss. */}
       {!isInstantWin && !isRoundOver && (
@@ -837,14 +855,6 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
               </GlassPanel>
             ))}
           </View>
-
-          {round.nextRoundReady && round.nextRoundReady[you] ? (
-            <Text style={styles.waitingText}>Waiting for everyone else to ante up…</Text>
-          ) : (
-            <GradientButton onPress={() => act("ready-for-next-round")} disabled={busy} style={styles.actionButton}>
-              {busy ? "…" : `Ante Up $${packAmount}`}
-            </GradientButton>
-          )}
         </>
       )}
     </ScrollView>
@@ -957,6 +967,8 @@ const styles = StyleSheet.create({
   },
   winnerTitle: { color: "#2a1a0a", fontWeight: "800", fontSize: 17, textAlign: "center" },
   winnerCategory: { color: "#4a2f14", fontSize: 13, marginTop: 4 },
+  winnerActionsRow: { flexDirection: "row", width: "100%", gap: 12, marginBottom: 16 },
+  winnerActionButton: { flex: 1 },
   turnBanner: { paddingVertical: 10, paddingHorizontal: 14, alignItems: "center" },
   turnBannerTitle: { color: colors.textPrimary, fontWeight: "700", fontSize: 14, textAlign: "center" },
   turnBannerTitleMe: { color: colors.sunGold, fontWeight: "800", fontSize: 16 },
