@@ -670,13 +670,19 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
         </GlassPanel>
       </View>
 
+      {/* Leave table moves down into winnerActionsRow once the round ends
+          (see below) — keeping both here AND there, right on top of a
+          glowing winner banner, was a wall of competing controls. Sound/
+          Notify stay put always; they're small, lightweight prefs, not
+          part of the "what next" decision. */}
       <View style={styles.topLinksRow}>
-        <TouchableOpacity onPress={handleLeave} disabled={busy} activeOpacity={0.7} hitSlop={TOUCH_PAD}>
-          <Text style={styles.leaveText}>Leave table</Text>
-        </TouchableOpacity>
+        {!(isInstantWin || isRoundOver) && (
+          <TouchableOpacity onPress={handleLeave} disabled={busy} activeOpacity={0.7} hitSlop={TOUCH_PAD}>
+            <Text style={styles.leaveText}>Leave table</Text>
+          </TouchableOpacity>
+        )}
         <SoundToggle enabled={soundEnabled} onToggle={() => setSoundEnabled(!soundEnabled)} />
         <PushToggle enabled={pushEnabled} busy={pushBusy} onToggle={togglePush} />
-        {isRoundOver && players.length < 6 && <InviteButton onPress={handleShare} copied={linkCopied} />}
       </View>
 
       {winnerSet.size > 0 && (
@@ -690,7 +696,9 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
       )}
 
       {/* Right where the winner's announced, not buried below the whole
-          table — so the decision to continue or leave is immediate. */}
+          table — so the decision to continue, invite more players, or
+          leave is immediate, and it's the ONE place those controls live
+          once the round ends (not duplicated up in topLinksRow too). */}
       {(isInstantWin || isRoundOver) && (
         <View style={styles.winnerActionsRow}>
           <GradientButton variant="secondary" onPress={handleLeave} disabled={busy} style={styles.winnerActionButton}>
@@ -705,6 +713,11 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
       )}
       {(isInstantWin || isRoundOver) && round.nextRoundReady && round.nextRoundReady[you] && (
         <Text style={styles.waitingText}>Waiting for everyone else to ante up…</Text>
+      )}
+      {isRoundOver && players.length < 6 && (
+        <View style={styles.inviteRow}>
+          <InviteButton onPress={handleShare} copied={linkCopied} />
+        </View>
       )}
 
       {/* Whose turn it is, stated outright — the gold name on an opponent's
@@ -1016,6 +1029,7 @@ const styles = StyleSheet.create({
   winnerCategory: { color: "#4a2f14", fontSize: 13, marginTop: 4 },
   winnerActionsRow: { flexDirection: "row", width: "100%", gap: 12, marginBottom: 16 },
   winnerActionButton: { flex: 1 },
+  inviteRow: { width: "100%", alignItems: "center", marginBottom: 16 },
   turnBanner: { paddingVertical: 10, paddingHorizontal: 14, alignItems: "center" },
   turnBannerTitle: { color: colors.textPrimary, fontWeight: "700", fontSize: 14, textAlign: "center" },
   turnBannerTitleMe: { color: colors.sunGold, fontWeight: "800", fontSize: 16 },
