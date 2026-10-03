@@ -19,18 +19,24 @@ function buildInviteMessage(code) {
 
 /**
  * Shares the invite via the native/OS share sheet where available. Falls
- * back to copying the link to the clipboard when sharing isn't supported
+ * back to copying to the clipboard when sharing isn't supported
  * (react-native-web's Share only works via the Web Share API, which most
  * desktop browsers don't implement) — calls `onCopied` so the screen can
  * show its own confirmation, since there's no OS-level feedback for a
  * clipboard copy the way there is for the share sheet.
+ *
+ * Both paths copy/share the FULL message (link + the room code spelled out
+ * on its own line), not just the bare link — the code is technically
+ * embedded in the link's query param either way, but a friend pasting the
+ * message into a group chat, or typing the code by hand because the link
+ * didn't carry over cleanly, needs to actually see it written out.
  */
 export async function shareInvite(code, { onCopied } = {}) {
   try {
     await Share.share({ message: buildInviteMessage(code) });
   } catch {
     try {
-      await Clipboard.setStringAsync(buildInviteLink(code));
+      await Clipboard.setStringAsync(buildInviteMessage(code));
       onCopied && onCopied();
     } catch {
       // Nothing more we can do — let it fail quietly rather than crash.

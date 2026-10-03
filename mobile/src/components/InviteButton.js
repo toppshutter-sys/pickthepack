@@ -40,7 +40,7 @@ export default function InviteButton({ onPress, copied, style }) {
     <Pressable onPress={onPress} onPressIn={onPressIn} onPressOut={onPressOut}>
       <Animated.View style={[{ transform: [{ scale }], shadowColor: colors.sunCoral, shadowOpacity, shadowRadius, shadowOffset: { width: 0, height: 0 } }, style]}>
         <LinearGradient colors={gradients.sunset} start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }} style={styles.pill}>
-          <Text style={styles.text}>{copied ? "✓ Link copied!" : "📤  Invite players"}</Text>
+          <Text style={styles.text}>{copied ? "✓ Invite copied!" : "📤  Invite players"}</Text>
         </LinearGradient>
       </Animated.View>
     </Pressable>
