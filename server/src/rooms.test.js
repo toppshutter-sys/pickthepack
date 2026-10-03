@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { RoomManager, FLIP_COOLDOWN_MS, KNOCK_COOLDOWN_MS, HISTORY_LIMIT, STARTING_BALANCE } = require("./rooms");
+const { RoomManager, FLIP_COOLDOWN_MS, KNOCK_COOLDOWN_MS, HISTORY_LIMIT, STARTING_BALANCE, STUCK_GRACE_MS } = require("./rooms");
 const engine = require("./gameEngine");
 const { findMandatoryKnock } = engine;
 const c = engine.makeCard;
@@ -1006,4 +1006,130 @@ test("toPlayerState: exposes matchedCards so a matched-out winner's cards are st
     state.round.matchedCards[winnerIdx].length > 0,
     "but their matched cards are still tracked, visible to every player, not just the winner"
   );
+});
+
+test("skipStuckPlayer: rejected before the grace period has elapsed", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  const r = forceRoundActive(rooms, room);
+  const turnIdx = r.round.turnIndex;
+  const otherIdx = (turnIdx + 1) % 3;
+  assert.throws(
+    () => rooms.skipStuckPlayer(room.code, `s${otherIdx}`, turnIdx),
+    /little more time/
+  );
+});
+
+test("skipStuckPlayer: force-flips the deck on behalf of a stuck flip-turn player", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  const r = forceRoundActive(rooms, room);
+  const turnIdx = r.round.turnIndex;
+  const otherIdx = (turnIdx + 1) % 3;
+  room.waitingSince = Date.now() - (STUCK_GRACE_MS + 100);
+  const { room: after } = rooms.skipStuckPlayer(room.code, `s${otherIdx}`, turnIdx);
+  assert.equal(after.status, "round-active", "a plain flip never ends the round outright");
+  assert.notEqual(after.round.turnIndex, turnIdx, "the flip-turn moved on, same as a real flip would");
+  const messages = after.log.map((entry) => entry.message);
+  assert.ok(
+    messages.some((m) => m.includes("was taking too long") && m.includes("flipped the deck for them")),
+    "expects an explicit skip log entry"
+  );
+});
+
+test("skipStuckPlayer: throws when the targeted player isn't actually blocking anything", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  const r = forceRoundActive(rooms, room);
+  const turnIdx = r.round.turnIndex;
+  // The third seat, neither the flip-turn player nor the (nonexistent, in
+  // this state) placement player — genuinely not holding anything up.
+  const bystanderIdx = (turnIdx + 2) % 3;
+  const requesterIdx = (turnIdx + 1) % 3;
+  room.waitingSince = Date.now() - (STUCK_GRACE_MS + 100);
+  assert.throws(
+    () => rooms.skipStuckPlayer(room.code, `s${requesterIdx}`, bystanderIdx),
+    /isn't holding anything up/
+  );
+});
+
+test("skipStuckPlayer: force-places a target on behalf of a stuck pending-placement player", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  const { matchInfo } = forceRoundActiveWithMatch(rooms, room);
+  room.lastTargetAt = Date.now() - (KNOCK_COOLDOWN_MS + 100);
+  const after = rooms.tapCard(room.code, `s${matchInfo.playerIdx}`, matchInfo.card.id, null);
+  if (after.round.pendingPlacement === null || after.round.pendingPlacement === undefined) {
+    return; // this particular knock didn't leave a placement pending — nothing to check here
+  }
+  const stuckIdx = after.round.pendingPlacement;
+  const requesterIdx = (stuckIdx + 1) % 3;
+  room.waitingSince = Date.now() - (STUCK_GRACE_MS + 100);
+  const { room: result } = rooms.skipStuckPlayer(room.code, `s${requesterIdx}`, stuckIdx);
+  assert.ok(
+    result.round.pendingPlacement === null || result.round.pendingPlacement === undefined,
+    "the placement resolved — a target card was auto-placed on their behalf"
+  );
+  const messages = result.log.map((entry) => entry.message);
+  assert.ok(messages.some((m) => m.includes("was taking too long") && m.includes("placed a target card for them")));
+});
+
+test("skipStuckPlayer: works even when the stuck player is disconnected mid-round", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  const r = forceRoundActive(rooms, room);
+  const turnIdx = r.round.turnIndex;
+  const otherIdx = (turnIdx + 1) % 3;
+  room.players[turnIdx].connected = false;
+  room.waitingSince = Date.now() - (STUCK_GRACE_MS + 100);
+  assert.doesNotThrow(() => rooms.skipStuckPlayer(room.code, `s${otherIdx}`, turnIdx));
+});
+
+test("skipStuckPlayer: force-recasts on behalf of a stuck player during awaiting-recast", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  forceAwaitingRecast(rooms, room);
+  room.waitingSince = Date.now() - (STUCK_GRACE_MS + 100);
+  const { room: after } = rooms.skipStuckPlayer(room.code, "s0", 1); // Bo is stuck
+  assert.equal(after.status, "awaiting-recast", "still waiting on Cy");
+  assert.ok(room.recastReady.has("s1"), "Bo's recast was confirmed on their behalf");
+});
+
+test("skipStuckPlayer: a disconnected player during awaiting-recast is never reported as the blocker", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  forceAwaitingRecast(rooms, room);
+  room.players[1].connected = false; // Bo — already excluded from "still waiting" by design
+  room.waitingSince = Date.now() - (STUCK_GRACE_MS + 100);
+  assert.throws(() => rooms.skipStuckPlayer(room.code, "s0", 1), /isn't holding anything up/);
+});
+
+test("skipStuckPlayer: force-antes on behalf of a stuck player during round-over", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  forceRoundOver(rooms, room);
+  room.waitingSince = Date.now() - (STUCK_GRACE_MS + 100);
+  const { room: after } = rooms.skipStuckPlayer(room.code, "s0", 1); // Bo is stuck
+  assert.equal(after.status, "round-over", "still waiting on Cy");
+  assert.ok(room.nextRoundReady.has("s1"), "Bo's ante was confirmed on their behalf");
+});
+
+test("skipStuckPlayer: rejects skipping yourself", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  forceRoundOver(rooms, room);
+  room.waitingSince = Date.now() - (STUCK_GRACE_MS + 100);
+  assert.throws(() => rooms.skipStuckPlayer(room.code, "s0", 0), /can't skip yourself/);
+});
+
+test("skipStuckPlayer: rejects an unseated requester", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  forceRoundOver(rooms, room);
+  room.waitingSince = Date.now() - (STUCK_GRACE_MS + 100);
+  assert.throws(() => rooms.skipStuckPlayer(room.code, "ghost", 1), /not seated/);
+});
+
+test("skipStuckPlayer: rejects an out-of-range target index", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  forceRoundOver(rooms, room);
+  room.waitingSince = Date.now() - (STUCK_GRACE_MS + 100);
+  assert.throws(() => rooms.skipStuckPlayer(room.code, "s0", 99), /isn't seated/);
+});
+
+test("toPlayerState: exposes skipAvailableAt derived from waitingSince", () => {
+  const { rooms, room } = seatRoom(["Ann", "Bo", "Cy"]);
+  forceRoundActive(rooms, room);
+  const state = rooms.toPlayerState(room, "s0");
+  assert.equal(state.round.skipAvailableAt, room.waitingSince + STUCK_GRACE_MS);
 });

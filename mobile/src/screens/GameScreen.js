@@ -275,12 +275,16 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
     return hand;
   }
 
-  const roundIsLive = roomState.status === "round-active";
+  // Also ticks during awaiting-recast/round-over, not just round-active —
+  // the skip-stuck-player countdown (see PlayerRow's Skip control) needs to
+  // count down live in those states too, not just the flip/knock cooldowns
+  // that only ever apply mid-round.
+  const needsCooldownTicker = roomState.status === "round-active" || roomState.status === "awaiting-recast" || roomState.status === "round-over";
   useEffect(() => {
-    if (!roundIsLive) return;
+    if (!needsCooldownTicker) return;
     const id = setInterval(() => setNow(Date.now()), 150);
     return () => clearInterval(id);
-  }, [roundIsLive]);
+  }, [needsCooldownTicker]);
 
   // Reset the selection whenever the target card changes for any reason —
   // your own successful action, someone else racing you to it, or a flip —
@@ -474,6 +478,16 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
     if (ok) setSelectingMatch(false);
   }
 
+  // Forces whoever's currently blocking progress (a stuck flip-turn,
+  // placement, recast, or ante-up) to act on their own behalf — see
+  // rooms.js's skipStuckPlayer. Available to anyone once the room's been
+  // quiet long enough (round.skipAvailableAt); the server is the actual
+  // authority on both the grace period and who's genuinely stuck, so a
+  // premature or wrong tap just surfaces that as an ordinary error.
+  async function skipStuckPlayer(targetIndex) {
+    await act("skip-stuck-player", { targetIndex });
+  }
+
   function tapTargetCard() {
     if (!round || round.phase !== "matching" || roomState.status === "round-over" || !round.faceUpCard) return;
     setSelectingMatch((prev) => !prev);
@@ -592,9 +606,16 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
                 </Text>
                 <NetPill player={p} delta={roundDeltaFor(i)} startingBalance={roomState.startingBalance} />
               </View>
-              <Text style={round.recastReady[i] ? styles.recastDone : styles.recastPending}>
-                {round.recastReady[i] ? "✓ recast" : p.connected ? "waiting…" : "disconnected"}
-              </Text>
+              <View style={styles.recastStatusCol}>
+                <Text style={round.recastReady[i] ? styles.recastDone : styles.recastPending}>
+                  {round.recastReady[i] ? "✓ recast" : p.connected ? "waiting…" : "disconnected"}
+                </Text>
+                {!round.recastReady[i] && p.connected && i !== you && round.skipAvailableAt != null && now >= round.skipAvailableAt && (
+                  <TouchableOpacity onPress={() => skipStuckPlayer(i)} disabled={busy} activeOpacity={0.7} hitSlop={TOUCH_PAD}>
+                    <Text style={styles.skipLinkText}>⏭ skip</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </GlassPanel>
           ))}
         </View>
@@ -728,6 +749,13 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
           isMe={placementPending ? isMyPendingPlacement : isMyFlipTurn}
           playerName={players[placementPending ? pendingPlacement : round.turnIndex].name}
           kind={placementPending ? "place" : "flip"}
+          canSkip={
+            !(placementPending ? isMyPendingPlacement : isMyFlipTurn) &&
+            round.skipAvailableAt != null &&
+            now >= round.skipAvailableAt
+          }
+          busy={busy}
+          onSkip={() => skipStuckPlayer(placementPending ? pendingPlacement : round.turnIndex)}
         />
       )}
 
@@ -886,9 +914,20 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
                   </Text>
                   <NetPill player={p} delta={roundDeltaFor(i)} startingBalance={roomState.startingBalance} />
                 </View>
-                <Text style={round.nextRoundReady && round.nextRoundReady[i] ? styles.recastDone : styles.recastPending}>
-                  {round.nextRoundReady && round.nextRoundReady[i] ? "✓ anted up" : p.connected ? "waiting…" : "disconnected"}
-                </Text>
+                <View style={styles.recastStatusCol}>
+                  <Text style={round.nextRoundReady && round.nextRoundReady[i] ? styles.recastDone : styles.recastPending}>
+                    {round.nextRoundReady && round.nextRoundReady[i] ? "✓ anted up" : p.connected ? "waiting…" : "disconnected"}
+                  </Text>
+                  {!(round.nextRoundReady && round.nextRoundReady[i]) &&
+                    p.connected &&
+                    i !== you &&
+                    round.skipAvailableAt != null &&
+                    now >= round.skipAvailableAt && (
+                      <TouchableOpacity onPress={() => skipStuckPlayer(i)} disabled={busy} activeOpacity={0.7} hitSlop={TOUCH_PAD}>
+                        <Text style={styles.skipLinkText}>⏭ skip</Text>
+                      </TouchableOpacity>
+                    )}
+                </View>
               </GlassPanel>
             ))}
           </View>
@@ -904,7 +943,7 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
  * Pops in fresh whenever the turn changes hands; the viewer's own turn gets
  * the gold treatment so it's unmistakable without reading the name.
  */
-function TurnBanner({ turnKey, isMe, playerName, kind }) {
+function TurnBanner({ turnKey, isMe, playerName, kind, canSkip, busy, onSkip }) {
   const enter = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     enter.setValue(0);
@@ -953,6 +992,11 @@ function TurnBanner({ turnKey, isMe, playerName, kind }) {
       <GlassPanel style={styles.turnBanner} borderColor={isMe ? colors.sunGold : colors.aquaDim}>
         <Text style={[styles.turnBannerTitle, isMe && styles.turnBannerTitleMe]}>{title}</Text>
         {sub ? <Text style={styles.turnBannerSub}>{sub}</Text> : null}
+        {canSkip && (
+          <TouchableOpacity onPress={onSkip} disabled={busy} activeOpacity={0.7} hitSlop={TOUCH_PAD} style={styles.skipLink}>
+            <Text style={styles.skipLinkText}>{busy ? "…" : `⏭ ${playerName} is taking a while — skip for them`}</Text>
+          </TouchableOpacity>
+        )}
       </GlassPanel>
     </Animated.View>
   );
@@ -1034,6 +1078,8 @@ const styles = StyleSheet.create({
   turnBannerTitle: { color: colors.textPrimary, fontWeight: "700", fontSize: 14, textAlign: "center" },
   turnBannerTitleMe: { color: colors.sunGold, fontWeight: "800", fontSize: 16 },
   turnBannerSub: { color: colors.textMuted, fontSize: 12, marginTop: 3, textAlign: "center" },
+  skipLink: { marginTop: 8 },
+  skipLinkText: { color: colors.sunGold, fontSize: 11.5, fontWeight: "700", textDecorationLine: "underline" },
   knockBanner: { paddingVertical: 10, paddingHorizontal: 14, alignItems: "center" },
   knockText: { color: colors.sunGold, fontWeight: "700", fontSize: 13 },
   dealerCardBanner: {
@@ -1050,6 +1096,7 @@ const styles = StyleSheet.create({
   },
   recastName: { color: "#fff", fontSize: 16 },
   recastNameCol: { alignItems: "flex-start" },
+  recastStatusCol: { alignItems: "flex-end" },
   recastDone: { color: colors.positive, fontSize: 13, fontWeight: "700" },
   recastPending: { color: colors.textMuted, fontSize: 13 },
   netPill: { paddingHorizontal: 10, paddingVertical: 3, marginTop: 3, marginBottom: 6 },

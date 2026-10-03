@@ -38,6 +38,13 @@ const HISTORY_LIMIT = 30;
 // going negative.
 const STARTING_BALANCE = 50;
 
+// How long the room has to go completely quiet — nobody flipping, knocking,
+// placing, recasting, or anteing up — before any OTHER player is allowed to
+// skip whoever's currently blocking progress (see skipStuckPlayer). Long
+// enough that someone genuinely thinking isn't instantly skippable, short
+// enough that a genuinely AFK player doesn't stall the room indefinitely.
+const STUCK_GRACE_MS = 30000;
+
 function makeRoomCode() {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I ambiguity
   let code = "";
@@ -96,6 +103,10 @@ class RoomManager {
       // thread an explicit "did the turn just change" flag through every
       // caller.
       lastTurnKey: null,
+      // When the room last saw any real forward progress (a flip, a knock,
+      // a placement, a recast, an ante-up, or a fresh deal) — see
+      // skipStuckPlayer and STUCK_GRACE_MS.
+      waitingSince: Date.now(),
     };
     this.rooms.set(code, room);
     return room;
@@ -392,6 +403,7 @@ class RoomManager {
     if (!player.connected) throw new Error("You're disconnected");
 
     room.nextRoundReady.add(socketId);
+    room.waitingSince = Date.now();
     const booted = this._maybeStartNextRound(room);
     return { room, booted };
   }
@@ -448,6 +460,7 @@ class RoomManager {
     if (!player.connected) throw new Error("You're disconnected");
 
     room.recastReady.add(socketId);
+    room.waitingSince = Date.now();
     this._maybeResolveRecast(room);
     return room;
   }
@@ -471,6 +484,7 @@ class RoomManager {
 
   /** Checks `hands`/`deck` against the engine and applies whatever phase comes back. */
   _resolveTarget(room, hands, deck) {
+    room.waitingSince = Date.now();
     const result = engine.resolveOpeningTarget({ hands, deck, dealerIndex: room.dealerIndex });
     room.round = result;
 
@@ -543,6 +557,7 @@ class RoomManager {
   }
 
   _applyTurnResult(room, actingPlayer, after) {
+    room.waitingSince = Date.now();
     room.round = after;
     if (after.action && after.action.type.startsWith("knock")) {
       room.lastKnock = { playerIdx: after.action.playerIdx, card: after.action.card };
@@ -682,6 +697,77 @@ class RoomManager {
   }
 
   /**
+   * Any other seated player may force-resolve whoever's currently blocking
+   * progress — their flip-turn, their pending target placement, or an
+   * unconfirmed recast/next-round ante — once the room's gone quiet for
+   * STUCK_GRACE_MS with nobody acting. Deliberately open to anyone, not
+   * just whoever created the room: see leaveRoom's comment above — there's
+   * no host here with any special standing the rest of the table doesn't
+   * equally have.
+   *
+   * Never actually removes the stuck player's seat — hands, the pot, and
+   * turn order are all indexed by seat position (see leaveRoom), so instead
+   * this acts ON THEIR BEHALF, through their own socket id, via the exact
+   * same methods they'd normally call themselves (an auto-flip, an
+   * auto-placed target, an auto-recast, or an auto-ante). Nothing about
+   * indexing ever has to change, and they stay seated — just skipped once.
+   */
+  skipStuckPlayer(code, requesterSocketId, targetIdx) {
+    const room = this.rooms.get(code);
+    if (!room) throw new Error("Room not found");
+    const requester = room.players.find((p) => p.id === requesterSocketId);
+    if (!requester) throw new Error("You're not seated in this room");
+    // Targeted by seat index, not socket id — like pushSubscription, a
+    // player's socket id is never sent to other clients (see toPlayerState),
+    // so the index they already render the roster by is the only handle
+    // the client actually has for "this other player."
+    const target = room.players[targetIdx];
+    if (!target) throw new Error("That player isn't seated in this room");
+    if (target.id === requesterSocketId) throw new Error("You can't skip yourself — just act, or leave instead");
+
+    const elapsed = Date.now() - room.waitingSince;
+    if (elapsed < STUCK_GRACE_MS) {
+      throw new Error(`Give them a little more time — try again in ${Math.ceil((STUCK_GRACE_MS - elapsed) / 1000)}s`);
+    }
+
+    const notStuck = () => new Error("That player isn't holding anything up right now");
+
+    // Normalized to always { room, booted } — readyForNextRound is the only
+    // one of the four underlying methods that can itself boot someone (an
+    // ante they can no longer cover), so the other three just report none.
+    if (room.status === "round-active" && room.round) {
+      const placementPending = room.round.pendingPlacement !== null && room.round.pendingPlacement !== undefined;
+      if (placementPending && room.round.pendingPlacement === targetIdx) {
+        const hand = room.round.hands[targetIdx] || [];
+        if (hand.length === 0) throw notStuck();
+        this.addLog(room, `${target.name} was taking too long, so ${requester.name} placed a target card for them.`);
+        return { room: this.placeTarget(code, target.id, hand[0].id), booted: [] };
+      }
+      if (!placementPending && room.round.turnIndex === targetIdx) {
+        this.addLog(room, `${target.name} was taking too long, so ${requester.name} flipped the deck for them.`);
+        // Already waited out STUCK_GRACE_MS (30s), far longer than
+        // FLIP_COOLDOWN_MS (1s) — tapDeck's own cooldown check would
+        // otherwise still block this if nobody's flipped yet this round
+        // (lastFlipAt resets fresh at the start of every round).
+        room.lastFlipAt = 0;
+        return { room: this.tapDeck(code, target.id), booted: [] };
+      }
+      throw notStuck();
+    }
+    if (room.status === "awaiting-recast") {
+      if (!target.connected || room.recastReady.has(target.id)) throw notStuck();
+      this.addLog(room, `${target.name} was taking too long, so ${requester.name} recast their bet for them.`);
+      return { room: this.recastBet(code, target.id), booted: [] };
+    }
+    if (room.status === "round-over") {
+      if (!target.connected || (room.nextRoundReady && room.nextRoundReady.has(target.id))) throw notStuck();
+      this.addLog(room, `${target.name} was taking too long, so ${requester.name} anted up for them.`);
+      return this.readyForNextRound(code, target.id);
+    }
+    throw notStuck();
+  }
+
+  /**
    * Builds the state sent to ONE specific socket. During an active
    * Matching Phase, other players' hands are hidden (card count only) —
    * real money is on the table. An instant-win result is resolved the
@@ -746,6 +832,9 @@ class RoomManager {
             // the actual authority via tapDeck/tapCard's own cooldown checks.
             flipAvailableAt: room.lastFlipAt + FLIP_COOLDOWN_MS,
             knockAvailableAt: room.lastTargetAt + KNOCK_COOLDOWN_MS,
+            // When another player becomes allowed to skip whoever's
+            // currently blocking progress — see skipStuckPlayer.
+            skipAvailableAt: room.waitingSince + STUCK_GRACE_MS,
           }
         : null,
       log: room.log.slice(-20),
@@ -763,4 +852,4 @@ class RoomManager {
   }
 }
 
-module.exports = { RoomManager, makeRoomCode, FLIP_COOLDOWN_MS, KNOCK_COOLDOWN_MS, HISTORY_LIMIT, STARTING_BALANCE };
+module.exports = { RoomManager, makeRoomCode, FLIP_COOLDOWN_MS, KNOCK_COOLDOWN_MS, HISTORY_LIMIT, STARTING_BALANCE, STUCK_GRACE_MS };

@@ -233,6 +233,22 @@ io.on("connection", (socket) => {
     })
   );
 
+  // Any seated player may force-resolve whoever's currently blocking
+  // progress — see skipStuckPlayer's own doc comment for why this isn't
+  // host-only and never actually removes a seat.
+  socket.on(
+    "skip-stuck-player",
+    safeHandler(socket, ({ code, targetIndex }, ack) => {
+      const { room, booted } = rooms.skipStuckPlayer(code, socket.id, targetIndex);
+      for (const b of booted) {
+        io.to(b.socketId).emit("booted", { reason: "Your balance can't cover this room's ante anymore." });
+      }
+      ack && ack({ ok: true });
+      rooms.broadcastState(room, io);
+      notifyTurnIfChanged(room);
+    })
+  );
+
   // Registers/clears this player's web-push subscription for "it's your
   // turn" notifications — opt-in, toggled client-side (see GameScreen's
   // sound-toggle-style control).
