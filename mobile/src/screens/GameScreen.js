@@ -17,6 +17,12 @@ import { confirmAsync, notify } from "../confirm";
 import { shareInvite } from "../inviteLink";
 import { colors, gradients } from "../theme";
 
+// Pads out small pill/text touch targets (Leave table, Sound/Notify
+// toggles) to the ~44x44pt minimum recommended for touch, without
+// inflating their compact visual size — the tap area grows, the pill
+// doesn't.
+const TOUCH_PAD = { top: 12, bottom: 12, left: 12, right: 12 };
+
 // Restarts a short sound effect from the beginning and plays it — wrapped
 // defensively, same spirit as GradientButton's own
 // Haptics.impactAsync(...).catch(() => {}): a blocked/failed playback
@@ -166,7 +172,7 @@ function NetPill({ player, size = "small", delta, startingBalance }) {
  */
 function SoundToggle({ enabled, onToggle }) {
   return (
-    <TouchableOpacity onPress={onToggle} activeOpacity={0.7}>
+    <TouchableOpacity onPress={onToggle} activeOpacity={0.7} hitSlop={TOUCH_PAD}>
       <GlassPanel
         style={styles.soundToggle}
         radius={999}
@@ -190,7 +196,7 @@ function SoundToggle({ enabled, onToggle }) {
 function PushToggle({ enabled, busy, onToggle }) {
   if (!isPushSupported()) return null;
   return (
-    <TouchableOpacity onPress={onToggle} activeOpacity={0.7} disabled={busy}>
+    <TouchableOpacity onPress={onToggle} activeOpacity={0.7} disabled={busy} hitSlop={TOUCH_PAD}>
       <GlassPanel
         style={styles.soundToggle}
         radius={999}
@@ -388,10 +394,17 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
   // previous round is never mistaken for a fresh knock even though card
   // ids (rank+suit only) recycle every deal.
   const lastKnockCardIdRef = useRef(round && round.lastKnock ? round.lastKnock.card.id : null);
+  // A quick colored flash behind the target card the instant it's knocked
+  // away — this game's equivalent of an "impact" moment, since nothing's
+  // actually taking damage. One-shot, not a loop: snaps to full brightness
+  // and fades back out over well under 300ms.
+  const knockFlash = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     const cardId = round && round.lastKnock ? round.lastKnock.card.id : null;
     if (cardId !== null && cardId !== lastKnockCardIdRef.current) {
       playSoundSafely(knockSound, soundEnabledRef);
+      knockFlash.setValue(1);
+      Animated.timing(knockFlash, { toValue: 0, duration: 260, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
     }
     lastKnockCardIdRef.current = cardId;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -550,7 +563,7 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
         </View>
 
         <View style={[styles.topLinksRow, styles.leaveTopButton]}>
-          <TouchableOpacity onPress={handleLeave} disabled={busy} activeOpacity={0.7}>
+          <TouchableOpacity onPress={handleLeave} disabled={busy} activeOpacity={0.7} hitSlop={TOUCH_PAD}>
             <Text style={styles.leaveText}>Leave table</Text>
           </TouchableOpacity>
           <SoundToggle enabled={soundEnabled} onToggle={() => setSoundEnabled(!soundEnabled)} />
@@ -658,7 +671,7 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
       </View>
 
       <View style={styles.topLinksRow}>
-        <TouchableOpacity onPress={handleLeave} disabled={busy} activeOpacity={0.7}>
+        <TouchableOpacity onPress={handleLeave} disabled={busy} activeOpacity={0.7} hitSlop={TOUCH_PAD}>
           <Text style={styles.leaveText}>Leave table</Text>
         </TouchableOpacity>
         <SoundToggle enabled={soundEnabled} onToggle={() => setSoundEnabled(!soundEnabled)} />
@@ -756,6 +769,16 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
           </View>
 
           <View style={styles.pileBlock}>
+            {/* The knock "impact" flash — absolutely positioned behind the
+                pile's own content so it reads as a pulse radiating from the
+                card, not a layout element pushing anything around. */}
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.knockFlash,
+                { opacity: knockFlash, transform: [{ scale: knockFlash.interpolate({ inputRange: [0, 1], outputRange: [1, 1.5] }) }] },
+              ]}
+            />
             <Text style={styles.pileLabel}>
               {isInstantWin && round.faceUpCard
                 ? "Dealer's card"
@@ -818,6 +841,7 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
           onCardPress={isMyPendingPlacement ? placeCard : selectingMatch ? tapCard : undefined}
           disabled={busy}
           dealFrom="above"
+          fan
         />
       </View>
 
@@ -874,6 +898,25 @@ function TurnBanner({ turnKey, isMe, playerName, kind }) {
     Animated.spring(enter, { toValue: 1, useNativeDriver: true, speed: 16, bounciness: 8 }).start();
   }, [turnKey]);
 
+  // A slow breathing glow while it's genuinely your turn — the same
+  // "something here wants your attention" language Card already uses for
+  // a tappable card, applied to the banner that's telling you WHY.
+  const glow = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!isMe) {
+      glow.setValue(0);
+      return undefined;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(glow, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.sin), useNativeDriver: false }),
+        Animated.timing(glow, { toValue: 0, duration: 900, easing: Easing.inOut(Easing.sin), useNativeDriver: false }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [isMe]);
+
   const title = isMe
     ? kind === "place" ? "🃏 Your turn — place a new target card" : "🎯 It's your turn!"
     : kind === "place" ? `🃏 It's ${playerName}'s turn — placing a new target` : `⏳ It's ${playerName}'s turn`;
@@ -888,6 +931,10 @@ function TurnBanner({ turnKey, isMe, playerName, kind }) {
         transform: [{ scale: enter.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1] }) }],
         width: "100%",
         marginBottom: 12,
+        shadowColor: colors.sunGold,
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: glow.interpolate({ inputRange: [0, 1], outputRange: [0.15, 0.55] }),
+        shadowRadius: glow.interpolate({ inputRange: [0, 1], outputRange: [6, 16] }),
       }}
     >
       <GlassPanel style={styles.turnBanner} borderColor={isMe ? colors.sunGold : colors.aquaDim}>
@@ -1017,14 +1064,23 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     borderWidth: 2,
     borderColor: colors.rail,
-    shadowColor: "#000",
-    shadowOpacity: 0.35,
+    shadowColor: "#06211d",
+    shadowOpacity: 0.4,
     shadowOffset: { width: 0, height: 10 },
     shadowRadius: 18,
     elevation: 6,
   },
   tableRow: { flexDirection: "row", justifyContent: "center", gap: 30 },
   pileBlock: { alignItems: "center", marginHorizontal: 10 },
+  knockFlash: {
+    position: "absolute",
+    top: 14,
+    alignSelf: "center",
+    width: 90,
+    height: 90,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,215,106,0.45)",
+  },
   pileLabel: { color: colors.textMuted, marginBottom: 6, fontSize: 12 },
   pileCount: { color: colors.textMuted, fontSize: 11, marginTop: 6 },
   emptyPileSlot: {

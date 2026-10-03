@@ -130,7 +130,7 @@ export default function HomeScreen({ onEnterRoom }) {
           <Text style={styles.title}>Pick the Pack</Text>
           <Text style={styles.welcome}>Welcome! 🌴</Text>
           <Text style={styles.subtitle}>Choose your pack, join the table.</Text>
-          <TouchableOpacity onPress={() => setShowRules(true)} activeOpacity={0.7}>
+          <TouchableOpacity onPress={() => setShowRules(true)} activeOpacity={0.7} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
             <Text style={styles.rulesLink}>❓ How to Play</Text>
           </TouchableOpacity>
         </Animated.View>
@@ -166,7 +166,7 @@ export default function HomeScreen({ onEnterRoom }) {
             </Text>
           </>
         ) : (
-          <TouchableOpacity onPress={() => setShowServerField(true)} activeOpacity={0.7}>
+          <TouchableOpacity onPress={() => setShowServerField(true)} activeOpacity={0.7} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
             <Text style={styles.advancedLink}>Advanced: change server address</Text>
           </TouchableOpacity>
         )}

@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Pressable, Animated, Easing } from "react-nativ
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { useScale } from "../responsive";
-import { colors, gradients } from "../theme";
+import { colors, gradients, radius, shadows } from "../theme";
 
 const RED_SUITS = new Set(["hearts", "diamonds"]);
 const SUIT_SYMBOL = { hearts: "♥", diamonds: "♦", spades: "♠", clubs: "♣" };
@@ -61,7 +61,7 @@ export default function Card({ card, size = "normal", onPress, disabled, tappabl
     }
     const anim = Animated.timing(entrance, {
       toValue: 1,
-      duration: 340,
+      duration: 260,
       delay: Math.min(index, 8) * 75,
       easing: Easing.out(Easing.back(1.25)),
       useNativeDriver: true,
@@ -80,6 +80,25 @@ export default function Card({ card, size = "normal", onPress, disabled, tappabl
   function onPressOut() {
     Animated.spring(pressScale, { toValue: 1, useNativeDriver: true, speed: 20, bounciness: 8 }).start();
   }
+
+  // Desktop-web hover: lift, scale up, and sweep a foil sheen across the
+  // face. onHoverIn/Out are react-native-web-only — native touch screens
+  // never fire them, so this is purely additive there. Only meaningful for
+  // a card that's actually actionable; a read-only opponent card hovering
+  // up would read as broken, not premium.
+  const canHover = !disabled && (!!onPress || tappable);
+  const hover = useRef(new Animated.Value(0)).current;
+  function onHoverIn() {
+    if (!canHover) return;
+    Animated.timing(hover, { toValue: 1, duration: 180, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
+  }
+  function onHoverOut() {
+    Animated.timing(hover, { toValue: 0, duration: 220, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
+  }
+  const hoverScale = hover.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] });
+  const hoverLift = hover.interpolate({ inputRange: [0, 1], outputRange: [0, -10] });
+  const sheenTranslate = hover.interpolate({ inputRange: [0, 1], outputRange: [-dims.width, dims.width] });
+  const sheenOpacity = hover.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0, 0.9, 0.9] });
 
   // A soft breathing glow for anything currently actionable, faster/brighter
   // when it's the one you've selected.
@@ -119,8 +138,18 @@ export default function Card({ card, size = "normal", onPress, disabled, tappabl
     ],
   };
 
+  // The diagonal foil sheen swept across the face on hover — present in
+  // both branches so the markup is symmetric, but it's invisible (opacity
+  // tracks `hover`, which never leaves 0) on a non-hoverable face-down card.
+  const sheen = (
+    <Animated.View pointerEvents="none" style={[styles.sheen, { opacity: sheenOpacity, transform: [{ translateX: sheenTranslate }, { rotate: "20deg" }] }]}>
+      <LinearGradient colors={gradients.sheen} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+    </Animated.View>
+  );
+
   const face = !card ? (
     <LinearGradient colors={gradients.cardBack} start={{ x: 0.15, y: 0 }} end={{ x: 0.9, y: 1 }} style={[styles.card, dims, styles.back, cardStyle]}>
+      <LinearGradient colors={["rgba(255,255,255,0.14)", "rgba(255,255,255,0)"]} pointerEvents="none" style={styles.innerHighlight} />
       {/* Sun-over-waves medallion — built from plain shapes (no icon/SVG
           library in the project) rather than an emoji glyph, which renders
           inconsistently across platforms and turns to mush at this size. */}
@@ -129,9 +158,15 @@ export default function Card({ card, size = "normal", onPress, disabled, tappabl
         <View style={styles.backWaveBack} />
         <View style={styles.backWaveFront} />
       </View>
+      {sheen}
     </LinearGradient>
   ) : (
     <LinearGradient colors={["#fffdf7", "#f2ecdd"]} start={{ x: 0.2, y: 0 }} end={{ x: 0.85, y: 1 }} style={[styles.card, dims, styles.face, cardStyle]}>
+      {/* A soft gloss catching the "light" at the top edge — the one cue
+          that most reads as "a physical object with depth" rather than a
+          flat rectangle, independent of the drop shadow underneath it. */}
+      <LinearGradient colors={["rgba(255,255,255,0.65)", "rgba(255,255,255,0)"]} pointerEvents="none" style={styles.innerHighlight} />
+
       {/* Thin printed-border inset — real card stock has a rule line
           framing the design a few mm in from the trimmed edge. */}
       <View style={styles.printBorder} pointerEvents="none" />
@@ -152,29 +187,46 @@ export default function Card({ card, size = "normal", onPress, disabled, tappabl
 
       <Text style={[styles.rank, { fontSize: rankFontSize }, isRed ? styles.red : styles.black]}>{card.rank}</Text>
       <Text style={[styles.suit, { fontSize: suitFontSize }, isRed ? styles.red : styles.black]}>{SUIT_SYMBOL[card.suit]}</Text>
+      {sheen}
     </LinearGradient>
   );
 
-  // Two separate Animated.View layers, not one with a combined style array:
-  // `entrance` is native-driven (opacity/transform) and `glow` is JS-driven
-  // (shadowOpacity/shadowRadius aren't supported by the native driver) — RN
-  // can't have a single view be partially native- and partially JS-driven,
-  // and mixing them in one style array crashes under the New Architecture.
+  // Layered depth, outside in: entrance (native-driven slide/fade/rotate) →
+  // hover (native-driven scale + Z-lift) → ambient shadow (JS-driven, soft
+  // and wide — the "floating above the felt" shadow, boosted on hover) →
+  // tappable/selected glow (JS-driven gold pulse, unrelated to depth) →
+  // the face itself, which already carries its own tight "contact" shadow
+  // via styles.card. Four nested layers because RN can't mix native- and
+  // JS-driven animated props on one View, and can't stack more than one
+  // shadow per View at all — this is the only way to get a real two-shadow
+  // "ambient + contact" look plus an independent hover lift.
   const content = (
     <Animated.View style={entranceStyle}>
-      <Animated.View
-        style={[
-          (tappable || selected) && {
-            shadowColor: selected ? GOLD_BRIGHT : GOLD,
-            shadowOpacity: glowShadowOpacity,
-            shadowRadius: glowRadius,
-            shadowOffset: { width: 0, height: 0 },
-            elevation: selected ? 10 : 6,
-          },
-          (tappable || selected) && { borderRadius: 11, borderWidth: selected ? 2.5 : 2, borderColor: selected ? "#ffd76a" : GOLD },
-        ]}
-      >
-        {face}
+      <Animated.View style={{ transform: [{ scale: hoverScale }, { translateY: hoverLift }] }}>
+        <Animated.View
+          style={{
+            shadowColor: shadows.card.ambient.shadowColor,
+            shadowOpacity: hover.interpolate({ inputRange: [0, 1], outputRange: [shadows.card.ambient.shadowOpacity, shadows.cardHover.ambient.shadowOpacity] }),
+            shadowRadius: hover.interpolate({ inputRange: [0, 1], outputRange: [shadows.card.ambient.shadowRadius, shadows.cardHover.ambient.shadowRadius] }),
+            shadowOffset: shadows.card.ambient.shadowOffset,
+            elevation: shadows.card.ambient.elevation,
+          }}
+        >
+          <Animated.View
+            style={[
+              (tappable || selected) && {
+                shadowColor: selected ? GOLD_BRIGHT : GOLD,
+                shadowOpacity: glowShadowOpacity,
+                shadowRadius: glowRadius,
+                shadowOffset: { width: 0, height: 0 },
+                elevation: selected ? 10 : 6,
+              },
+              (tappable || selected) && { borderRadius: radius.lg, borderWidth: selected ? 2.5 : 2, borderColor: selected ? "#ffd76a" : GOLD },
+            ]}
+          >
+            {face}
+          </Animated.View>
+        </Animated.View>
       </Animated.View>
     </Animated.View>
   );
@@ -182,7 +234,14 @@ export default function Card({ card, size = "normal", onPress, disabled, tappabl
   if (!onPress) return content;
 
   return (
-    <Pressable onPress={onPress} onPressIn={onPressIn} onPressOut={onPressOut} disabled={disabled}>
+    <Pressable
+      onPress={onPress}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
+      onHoverIn={onHoverIn}
+      onHoverOut={onHoverOut}
+      disabled={disabled}
+    >
       <Animated.View style={{ transform: [{ scale: pressScale }], opacity: disabled ? 0.5 : 1 }}>{content}</Animated.View>
     </Pressable>
   );
@@ -190,24 +249,23 @@ export default function Card({ card, size = "normal", onPress, disabled, tappabl
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 11,
+    borderRadius: radius.lg,
     alignItems: "center",
     justifyContent: "center",
     marginHorizontal: 4,
-    shadowColor: "#000",
-    shadowOpacity: 0.3,
-    shadowOffset: { width: 0, height: 6 },
-    shadowRadius: 11,
-    elevation: 4,
+    overflow: "hidden",
+    ...shadows.card.contact,
   },
   face: {},
+  innerHighlight: { position: "absolute", top: 0, left: 0, right: 0, height: "42%", borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg },
+  sheen: { position: "absolute", top: -20, bottom: -20, width: "55%" },
   printBorder: {
     position: "absolute",
     top: 5,
     left: 5,
     right: 5,
     bottom: 5,
-    borderRadius: 6,
+    borderRadius: 7,
     borderWidth: 1,
     borderColor: "rgba(0,0,0,0.09)",
   },

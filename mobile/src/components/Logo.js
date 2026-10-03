@@ -104,10 +104,10 @@ const styles = StyleSheet.create({
   card: {
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.35,
+    shadowColor: "#2a1206",
+    shadowOpacity: 0.4,
     shadowOffset: { width: 0, height: 8 },
-    shadowRadius: 14,
+    shadowRadius: 16,
     elevation: 6,
   },
   rim: { ...StyleSheet.absoluteFillObject, borderWidth: 2.5, borderColor: colors.sunGold },

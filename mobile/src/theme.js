@@ -57,9 +57,41 @@ export const gradients = {
   // Felt lit from above — lighter at the top where the deck/target card
   // sit, darkening toward the bottom, like a table lamp over real felt.
   felt: [colors.feltLight, colors.feltDark],
+  // A thin diagonal sheen swept across a card on hover — a hologram-foil
+  // hint rather than a literal rainbow, so it reads as "premium" without
+  // clashing with the sunset/aqua palette everything else uses.
+  sheen: ["transparent", "rgba(255,255,255,0.55)", "transparent"],
 };
 
+// 4px grid — every padding/margin/gap added or touched going forward picks
+// from this instead of a one-off number, so rhythm stays consistent as the
+// app grows. Existing untouched screens keep their own close-enough values
+// rather than being mechanically rewritten just to match.
+export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24, xxxl: 32 };
+
+// Border-radius scale — cards sit at "lg", panels/banners at "md"/"xl",
+// pill controls use 999 directly (that one's not really a "scale" step).
+export const radius = { sm: 8, md: 12, lg: 14, xl: 22 };
+
+/**
+ * Soft, colored, multi-layer shadow presets — replaces flat `shadowColor:
+ * "#000"` everywhere a card or panel needs to feel like it's actually
+ * sitting above the felt rather than just stacked in z-order. Each preset
+ * is two shadow descriptors: a tight, slightly-darker "contact" shadow and
+ * a wide, faint, warm-tinted "ambient" one, meant to be applied to two
+ * nested Views (RN only honors one shadow per layer — there's no native
+ * equivalent of CSS's comma-separated box-shadow list).
+ */
 export const shadows = {
   gold: colors.sunAmber,
   aqua: colors.aqua,
+  card: {
+    ambient: { shadowColor: "#2a1206", shadowOpacity: 0.28, shadowRadius: 20, shadowOffset: { width: 0, height: 14 }, elevation: 3 },
+    contact: { shadowColor: "#000", shadowOpacity: 0.22, shadowRadius: 6, shadowOffset: { width: 0, height: 3 }, elevation: 5 },
+  },
+  cardHover: {
+    ambient: { shadowColor: colors.sunAmber, shadowOpacity: 0.45, shadowRadius: 28, shadowOffset: { width: 0, height: 20 }, elevation: 6 },
+    contact: { shadowColor: "#000", shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: { width: 0, height: 6 }, elevation: 10 },
+  },
+  panel: { shadowColor: "#06211d", shadowOpacity: 0.3, shadowRadius: 18, shadowOffset: { width: 0, height: 10 }, elevation: 6 },
 };

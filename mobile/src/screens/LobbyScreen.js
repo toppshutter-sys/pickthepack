@@ -93,7 +93,7 @@ export default function LobbyScreen({ socket, roomState, code, onLeaveRoom }) {
           {busy ? "Dealing…" : "Start Round"}
         </GradientButton>
 
-        <TouchableOpacity onPress={handleLeave} disabled={busy} activeOpacity={0.7} style={styles.leaveButton}>
+        <TouchableOpacity onPress={handleLeave} disabled={busy} activeOpacity={0.7} style={styles.leaveButton} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Text style={styles.leaveText}>Leave table</Text>
         </TouchableOpacity>
 
@@ -102,7 +102,7 @@ export default function LobbyScreen({ socket, roomState, code, onLeaveRoom }) {
           table matching cards until someone matches their whole hand and takes the pot.
         </Text>
 
-        <TouchableOpacity onPress={() => setShowRules(true)} activeOpacity={0.7}>
+        <TouchableOpacity onPress={() => setShowRules(true)} activeOpacity={0.7} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Text style={styles.rulesLink}>❓ How to Play</Text>
         </TouchableOpacity>
         <RulesModal visible={showRules} onClose={() => setShowRules(false)} />
