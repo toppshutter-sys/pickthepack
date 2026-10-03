@@ -7,7 +7,7 @@ import { colors, gradients } from "../theme";
 /**
  * The "invite more players" call to action — a gold pill instead of plain
  * text, with a slow breathing glow so it reads as the thing to tap, not
- * just another link sitting next to "Leave table". Used in both the lobby
+ * just another link sitting next to "Leave room". Used in both the lobby
  * and mid-game (once a round ends and there's still room at the table).
  */
 export default function InviteButton({ onPress, copied, style }) {

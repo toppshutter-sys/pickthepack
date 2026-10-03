@@ -17,7 +17,7 @@ import { confirmAsync, notify } from "../confirm";
 import { shareInvite } from "../inviteLink";
 import { colors, gradients } from "../theme";
 
-// Pads out small pill/text touch targets (Leave table, Sound/Notify
+// Pads out small pill/text touch targets (Leave room, Sound/Notify
 // toggles) to the ~44x44pt minimum recommended for touch, without
 // inflating their compact visual size — the tap area grows, the pill
 // doesn't.
@@ -520,7 +520,7 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
   async function handleLeave() {
     const midRound = roomState.status === "round-active" || roomState.status === "awaiting-recast";
     const confirmed = await confirmAsync(
-      "Leave table?",
+      "Leave room?",
       midRound
         ? "You'll forfeit this hand — your ante stays in the pot — and your seat will show as disconnected."
         : "You'll give up your seat.",
@@ -564,7 +564,7 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
 
         <View style={[styles.topLinksRow, styles.leaveTopButton]}>
           <TouchableOpacity onPress={handleLeave} disabled={busy} activeOpacity={0.7} hitSlop={TOUCH_PAD}>
-            <Text style={styles.leaveText}>Leave table</Text>
+            <Text style={styles.leaveText}>Leave room</Text>
           </TouchableOpacity>
           <SoundToggle enabled={soundEnabled} onToggle={() => setSoundEnabled(!soundEnabled)} />
           <PushToggle enabled={pushEnabled} busy={pushBusy} onToggle={togglePush} />
@@ -670,7 +670,7 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
         </GlassPanel>
       </View>
 
-      {/* Leave table moves down into winnerActionsRow once the round ends
+      {/* Leave room moves down into winnerActionsRow once the round ends
           (see below) — keeping both here AND there, right on top of a
           glowing winner banner, was a wall of competing controls. Sound/
           Notify stay put always; they're small, lightweight prefs, not
@@ -678,7 +678,7 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
       <View style={styles.topLinksRow}>
         {!(isInstantWin || isRoundOver) && (
           <TouchableOpacity onPress={handleLeave} disabled={busy} activeOpacity={0.7} hitSlop={TOUCH_PAD}>
-            <Text style={styles.leaveText}>Leave table</Text>
+            <Text style={styles.leaveText}>Leave room</Text>
           </TouchableOpacity>
         )}
         <SoundToggle enabled={soundEnabled} onToggle={() => setSoundEnabled(!soundEnabled)} />
@@ -702,7 +702,7 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
       {(isInstantWin || isRoundOver) && (
         <View style={styles.winnerActionsRow}>
           <GradientButton variant="secondary" onPress={handleLeave} disabled={busy} style={styles.winnerActionButton}>
-            Leave table
+            Leave room
           </GradientButton>
           {!(round.nextRoundReady && round.nextRoundReady[you]) && (
             <GradientButton onPress={() => act("ready-for-next-round")} disabled={busy} style={styles.winnerActionButton}>

@@ -87,7 +87,7 @@ export default function InstallPrompt() {
       <Text style={styles.title}>📲 Install Pick the Pack</Text>
       {hasPrompt ? (
         <>
-          <Text style={styles.body}>Add it to your home screen to jump straight back into the table anytime.</Text>
+          <Text style={styles.body}>Add it to your home screen to jump straight back into the room anytime.</Text>
           <View style={styles.buttonWrap}>
             <GradientButton onPress={install}>Install app</GradientButton>
           </View>

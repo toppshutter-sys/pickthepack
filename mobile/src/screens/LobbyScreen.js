@@ -58,7 +58,7 @@ export default function LobbyScreen({ socket, roomState, code, onLeaveRoom }) {
   }
 
   async function handleLeave() {
-    const confirmed = await confirmAsync("Leave table?", "You'll give up your seat.", "Leave");
+    const confirmed = await confirmAsync("Leave room?", "You'll give up your seat.", "Leave");
     if (confirmed) leaveRoom();
   }
 
@@ -68,14 +68,14 @@ export default function LobbyScreen({ socket, roomState, code, onLeaveRoom }) {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Animated.View style={{ opacity: fadeIn, alignItems: "center", width: "100%" }}>
-        <Text style={styles.title}>Table {code}</Text>
+        <Text style={styles.title}>Room {code}</Text>
         {hasRoomForMore ? (
           <View style={styles.inviteBlock}>
             <InviteButton onPress={handleShare} copied={linkCopied} />
             <Text style={styles.shareHint}>WhatsApp, iMessage, text, email…</Text>
           </View>
         ) : (
-          <Text style={styles.shareHint}>Table full (6/6)</Text>
+          <Text style={styles.shareHint}>Room full (6/6)</Text>
         )}
 
         <Text style={styles.packLabel}>Pack {roomState.packAmount} — ${roomState.packAmount} buy-in per round</Text>
@@ -94,12 +94,12 @@ export default function LobbyScreen({ socket, roomState, code, onLeaveRoom }) {
         </GradientButton>
 
         <TouchableOpacity onPress={handleLeave} disabled={busy} activeOpacity={0.7} style={styles.leaveButton} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-          <Text style={styles.leaveText}>Leave table</Text>
+          <Text style={styles.leaveText}>Leave room</Text>
         </TouchableOpacity>
 
         <Text style={styles.footnote}>
           Everyone antes ${roomState.packAmount} into the pot when the round starts. Go around the
-          table matching cards until someone matches their whole hand and takes the pot.
+          room matching cards until someone matches their whole hand and takes the pot.
         </Text>
 
         <TouchableOpacity onPress={() => setShowRules(true)} activeOpacity={0.7} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>

@@ -542,7 +542,7 @@ test("joinRoom: rejected when the name is already taken at this table", () => {
   const { rooms, room } = seatRoom(["Ann", "Bo"]);
   assert.throws(
     () => rooms.joinRoom({ code: room.code, socketId: "s2", playerName: "Ann" }),
-    /already at this table/
+    /already in this room/
   );
 });
 
@@ -550,11 +550,11 @@ test("joinRoom: name uniqueness is case-insensitive", () => {
   const { rooms, room } = seatRoom(["Ann", "Bo"]);
   assert.throws(
     () => rooms.joinRoom({ code: room.code, socketId: "s2", playerName: "ann" }),
-    /already at this table/
+    /already in this room/
   );
   assert.throws(
     () => rooms.joinRoom({ code: room.code, socketId: "s2", playerName: "ANN" }),
-    /already at this table/
+    /already in this room/
   );
 });
 

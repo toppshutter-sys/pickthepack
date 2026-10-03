@@ -113,7 +113,7 @@ export default function HomeScreen({ onEnterRoom }) {
       // to actually do about it (there's nothing to retry here; a seat
       // has to open up first).
       if (/Room is full/.test(message)) {
-        notify("Table full", "This table already has 6 players. You'll need to wait until a seat opens up before you can join.");
+        notify("Room full", "This room already has 6 players. You'll need to wait until a seat opens up before you can join.");
       }
     } finally {
       setBusy(false);
@@ -129,7 +129,7 @@ export default function HomeScreen({ onEnterRoom }) {
           </View>
           <Text style={styles.title}>Pick the Pack</Text>
           <Text style={styles.welcome}>Welcome! 🌴</Text>
-          <Text style={styles.subtitle}>Choose your pack, join the table.</Text>
+          <Text style={styles.subtitle}>Choose your pack, join the room.</Text>
           <TouchableOpacity onPress={() => setShowRules(true)} activeOpacity={0.7} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
             <Text style={styles.rulesLink}>❓ How to Play</Text>
           </TouchableOpacity>

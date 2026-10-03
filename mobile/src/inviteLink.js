@@ -14,7 +14,7 @@ export function buildInviteLink(code) {
 }
 
 function buildInviteMessage(code) {
-  return `Join my Pick the Pack table! ${buildInviteLink(code)}\n\n(Or just enter room code ${code} if that link doesn't work.)`;
+  return `Join my Pick the Pack room! ${buildInviteLink(code)}\n\n(Or just enter room code ${code} if that link doesn't work.)`;
 }
 
 /**

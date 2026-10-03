@@ -28,7 +28,7 @@ export default function RulesModal({ visible, onClose }) {
             <Text style={styles.title}>🃏 How to Play</Text>
             <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
               <Section title="The Ante">
-                Everyone antes the table's pack amount into the pot when a round starts. Win the
+                Everyone antes the room's pack amount into the pot when a round starts. Win the
                 round, win the pot.
               </Section>
               <Section title="Instant Win">
@@ -55,9 +55,9 @@ export default function RulesModal({ visible, onClose }) {
                 more unmatched cards and you choose one of them to place as the new target yourself.
               </Section>
               <Section title="Net & Running Low">
-                Each table tracks everyone's running net for the night, starting at $50. If your net
-                ever drops below the table's ante, you're removed before the next hand deals rather
-                than let it go negative — settle up and start a fresh table to keep playing.
+                Each room tracks everyone's running net for the night, starting at $50. If your net
+                ever drops below the room's ante, you're removed before the next hand deals rather
+                than let it go negative — settle up and start a fresh room to keep playing.
               </Section>
             </ScrollView>
             <GradientButton onPress={onClose}>Got it</GradientButton>

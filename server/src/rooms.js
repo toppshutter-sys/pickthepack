@@ -118,7 +118,7 @@ class RoomManager {
     if (room.players.length >= 6) throw new Error("Room is full (max 6 players)");
     if (room.players.some((p) => p.id === socketId)) throw new Error("Already in this room");
     if (room.players.some((p) => p.name.toLowerCase() === playerName.toLowerCase())) {
-      throw new Error(`"${playerName}" is already at this table — enter a different name`);
+      throw new Error(`"${playerName}" is already in this room — enter a different name`);
     }
     room.players.push({ id: socketId, name: playerName, connected: true, totalContributed: 0, totalWon: 0 });
     return room;
@@ -164,7 +164,7 @@ class RoomManager {
       room.round = null;
     }
 
-    this.addLog(room, `${leavingName} left the table.`);
+    this.addLog(room, `${leavingName} left the room.`);
 
     // A round can't continue with fewer than 2 players — drop back to the
     // lobby to wait for more, same as before anyone else had joined.
@@ -210,7 +210,7 @@ class RoomManager {
       room.players.splice(idx, 1);
       if (idx < room.dealerIndex) room.dealerIndex -= 1;
       else if (room.dealerIndex >= room.players.length) room.dealerIndex = 0;
-      this.addLog(room, `${p.name} couldn't cover the $${room.packAmount} ante and was removed from the table.`);
+      this.addLog(room, `${p.name} couldn't cover the $${room.packAmount} ante and was removed from the room.`);
       booted.push({ socketId: p.id, name: p.name });
     }
     if (booted.length === 0) return booted;

@@ -142,7 +142,7 @@ io.on("connection", (socket) => {
       // in room.players by the time one goes out), so tell them directly.
       const booted = rooms.bootIneligiblePlayers(code);
       for (const b of booted) {
-        io.to(b.socketId).emit("booted", { reason: "Your balance can't cover this table's ante anymore." });
+        io.to(b.socketId).emit("booted", { reason: "Your balance can't cover this room's ante anymore." });
       }
       const roomAfterBoot = rooms.rooms.get(code);
       if (roomAfterBoot && roomAfterBoot.players.length < 2) {
@@ -186,7 +186,7 @@ io.on("connection", (socket) => {
     safeHandler(socket, ({ code }, ack) => {
       const { room, booted } = rooms.readyForNextRound(code, socket.id);
       for (const b of booted) {
-        io.to(b.socketId).emit("booted", { reason: "Your balance can't cover this table's ante anymore." });
+        io.to(b.socketId).emit("booted", { reason: "Your balance can't cover this room's ante anymore." });
       }
       ack && ack({ ok: true });
       rooms.broadcastState(room, io);
@@ -258,7 +258,7 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => {
     const { room, booted } = rooms.markDisconnected(socket.id);
     for (const b of booted) {
-      io.to(b.socketId).emit("booted", { reason: "Your balance can't cover this table's ante anymore." });
+      io.to(b.socketId).emit("booted", { reason: "Your balance can't cover this room's ante anymore." });
     }
     if (room) rooms.broadcastState(room, io);
   });
