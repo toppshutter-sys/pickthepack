@@ -9,7 +9,12 @@ const RED_SUITS = new Set(["hearts", "diamonds"]);
 const SUIT_SYMBOL = { hearts: "♥", diamonds: "♦", spades: "♠", clubs: "♣" };
 
 const GOLD = colors.sunAmber;
-const GOLD_BRIGHT = colors.sunGold;
+// Gold stays the "you can tap this" invitation (the deck, the target card
+// before it's tapped, your hand once you're matching) — selecting one
+// (tapping the target card) switches to green, same bright green the knock
+// ring uses, so "I've picked this" reads as a distinct, deliberate state
+// rather than just a brighter version of the same ambient gold.
+const GREEN_SELECTED = "#3ef08a";
 
 /**
  * Renders one playing card. Pass `card = null` for a hidden opponent card
@@ -231,13 +236,13 @@ export default function Card({ card, size = "normal", onPress, disabled, tappabl
           <Animated.View
             style={[
               (tappable || selected) && {
-                shadowColor: selected ? GOLD_BRIGHT : GOLD,
+                shadowColor: selected ? GREEN_SELECTED : GOLD,
                 shadowOpacity: glowShadowOpacity,
                 shadowRadius: glowRadius,
                 shadowOffset: { width: 0, height: 0 },
                 elevation: selected ? 10 : 6,
               },
-              (tappable || selected) && { borderRadius: radius.lg, borderWidth: selected ? 2.5 : 2, borderColor: selected ? "#ffd76a" : GOLD },
+              (tappable || selected) && { borderRadius: radius.lg, borderWidth: selected ? 2.5 : 2, borderColor: selected ? GREEN_SELECTED : GOLD },
             ]}
           >
             {face}
