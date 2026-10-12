@@ -408,10 +408,7 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
     if (cardId !== null && cardId !== lastKnockCardIdRef.current) {
       playSoundSafely(knockSound, soundEnabledRef);
       knockFlash.setValue(1);
-      Animated.sequence([
-        Animated.delay(150),
-        Animated.timing(knockFlash, { toValue: 0, duration: 350, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-      ]).start();
+      Animated.timing(knockFlash, { toValue: 0, duration: 350, delay: 150, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
     }
     lastKnockCardIdRef.current = cardId;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1151,11 +1148,16 @@ const styles = StyleSheet.create({
   knockFlashAnchor: { position: "relative" },
   knockFlash: {
     position: "absolute",
-    top: -6,
-    left: -6,
-    right: -6,
-    bottom: -6,
-    borderRadius: radius.lg + 6,
+    // -10 rather than a tighter inset: the target card can be showing
+    // Card's own `selected` state at the same moment (briefly, while
+    // waiting on the tap-card ack), which grows it ~15% — at the top of
+    // useScale()'s range that growth alone eats most of a smaller inset,
+    // so this stays clear of the card's edge even then.
+    top: -10,
+    left: -10,
+    right: -10,
+    bottom: -10,
+    borderRadius: radius.lg + 10,
     borderWidth: 4,
     // A bright, saturated green (not colors.positive's soft pastel — that
     // blends right into the felt's own dark green/teal backdrop) with a
@@ -1167,11 +1169,20 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.9,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 0 },
+    // shadowColor/Opacity/Radius/Offset only render on Android when paired
+    // with elevation (see theme.js's shadows presets and Card's own
+    // tappable/selected glow) — without it, Android would only show the
+    // faint border + fill, missing the glow that's most of the point here.
+    elevation: 10,
   },
   pileLabel: { color: colors.textMuted, marginBottom: 6, fontSize: 12 },
   pileCount: { color: colors.textMuted, fontSize: 11, marginTop: 6 },
   emptyPileSlot: {
-    width: 56, height: 78, borderRadius: 11, borderWidth: 1.5, borderColor: colors.aquaDim, borderStyle: "dashed",
+    // Matches Card's own radius.lg — the knock ring insets around whichever
+    // of this or a real Card is showing, using one shared borderRadius; a
+    // mismatched radius here would make the ring's corners visibly not
+    // track this slot's corners.
+    width: 56, height: 78, borderRadius: radius.lg, borderWidth: 1.5, borderColor: colors.aquaDim, borderStyle: "dashed",
     alignItems: "center", justifyContent: "center",
   },
   emptyPileText: { color: colors.aqua, fontSize: 20 },

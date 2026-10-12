@@ -106,7 +106,9 @@ export default function Card({ card, size = "normal", onPress, disabled, tappabl
   // reads as an unmistakable, deliberate selection, not just a highlight.
   const selectedScale = useRef(new Animated.Value(1)).current;
   useEffect(() => {
-    Animated.spring(selectedScale, { toValue: selected ? 1.15 : 1, useNativeDriver: true, speed: 20, bounciness: 6 }).start();
+    const anim = Animated.spring(selectedScale, { toValue: selected ? 1.15 : 1, useNativeDriver: true, speed: 20, bounciness: 6 });
+    anim.start();
+    return () => anim.stop();
   }, [selected]);
 
   // A soft breathing glow for anything currently actionable, faster/brighter
@@ -211,7 +213,12 @@ export default function Card({ card, size = "normal", onPress, disabled, tappabl
   // "ambient + contact" look plus an independent hover lift.
   const content = (
     <Animated.View style={entranceStyle}>
-      <Animated.View style={{ transform: [{ scale: hoverScale }, { scale: selectedScale }, { translateY: hoverLift }] }}>
+      {/* translateY first, scales after — RN composes transforms in array
+          order (like CSS), so a translate placed AFTER a scale gets scaled
+          along with everything else, making the hover lift's actual
+          on-screen distance grow with selectedScale too. Translating first
+          keeps the lift a fixed screen-space distance regardless. */}
+      <Animated.View style={{ transform: [{ translateY: hoverLift }, { scale: hoverScale }, { scale: selectedScale }] }}>
         <Animated.View
           style={{
             shadowColor: shadows.card.ambient.shadowColor,
