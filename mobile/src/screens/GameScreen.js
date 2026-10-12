@@ -15,7 +15,7 @@ import { isPushSupported, getExistingSubscription, subscribeToPush, unsubscribeF
 import { centeredContent, useScale } from "../responsive";
 import { confirmAsync, notify } from "../confirm";
 import { shareInvite } from "../inviteLink";
-import { colors, gradients } from "../theme";
+import { colors, gradients, radius } from "../theme";
 
 // Pads out small pill/text touch targets (Leave room, Sound/Notify
 // toggles) to the ~44x44pt minimum recommended for touch, without
@@ -398,17 +398,20 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
   // previous round is never mistaken for a fresh knock even though card
   // ids (rank+suit only) recycle every deal.
   const lastKnockCardIdRef = useRef(round && round.lastKnock ? round.lastKnock.card.id : null);
-  // A quick colored flash behind the target card the instant it's knocked
-  // away — this game's equivalent of an "impact" moment, since nothing's
-  // actually taking damage. One-shot, not a loop: snaps to full brightness
-  // and fades back out over well under 300ms.
+  // A quick green ring around the target card the instant it's knocked away
+  // — this game's equivalent of an "impact" moment, since nothing's
+  // actually taking damage. One-shot, not a loop: snaps to full brightness,
+  // holds briefly so it actually registers, then fades.
   const knockFlash = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     const cardId = round && round.lastKnock ? round.lastKnock.card.id : null;
     if (cardId !== null && cardId !== lastKnockCardIdRef.current) {
       playSoundSafely(knockSound, soundEnabledRef);
       knockFlash.setValue(1);
-      Animated.timing(knockFlash, { toValue: 0, duration: 260, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
+      Animated.sequence([
+        Animated.delay(150),
+        Animated.timing(knockFlash, { toValue: 0, duration: 350, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+      ]).start();
     }
     lastKnockCardIdRef.current = cardId;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -810,16 +813,6 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
           </View>
 
           <View style={styles.pileBlock}>
-            {/* The knock "impact" flash — absolutely positioned behind the
-                pile's own content so it reads as a pulse radiating from the
-                card, not a layout element pushing anything around. */}
-            <Animated.View
-              pointerEvents="none"
-              style={[
-                styles.knockFlash,
-                { opacity: knockFlash, transform: [{ scale: knockFlash.interpolate({ inputRange: [0, 1], outputRange: [1, 1.5] }) }] },
-              ]}
-            />
             <Text style={styles.pileLabel}>
               {isInstantWin && round.faceUpCard
                 ? "Dealer's card"
@@ -829,19 +822,38 @@ export default function GameScreen({ socket, roomState, code, onLeaveRoom }) {
                 ? "Choosing new target…"
                 : "No flip needed"}
             </Text>
-            {round.faceUpCard ? (
-              <Card
-                card={round.faceUpCard}
-                onPress={tapTargetCard}
-                tappable={!isInstantWin && !isRoundOver && !knockBlockedByCooldown}
-                selected={selectingMatch}
-                disabled={isInstantWin || isRoundOver || busy || knockBlockedByCooldown}
+            {/* The knock "impact" ring wraps whichever of these two is
+                showing — a knock that leaves 2+ cards clears faceUpCard to
+                null THE SAME render as the knock itself (see
+                placementPending), so the ring needs somewhere to anchor
+                even when there's no card left to wrap, or it would just
+                silently never show for that case. */}
+            <View style={styles.knockFlashAnchor}>
+              {round.faceUpCard ? (
+                <Card
+                  card={round.faceUpCard}
+                  onPress={tapTargetCard}
+                  tappable={!isInstantWin && !isRoundOver && !knockBlockedByCooldown}
+                  selected={selectingMatch}
+                  disabled={isInstantWin || isRoundOver || busy || knockBlockedByCooldown}
+                />
+              ) : (
+                <View style={styles.emptyPileSlot}>
+                  <Text style={styles.emptyPileText}>—</Text>
+                </View>
+              )}
+              {/* A border around the card/slot itself (not a blob tucked
+                  behind it, which the card's own opaque face would just
+                  hide) so it's never masked, and bright/saturated enough to
+                  actually read against the felt's own dark green backdrop. */}
+              <Animated.View
+                pointerEvents="none"
+                style={[
+                  styles.knockFlash,
+                  { opacity: knockFlash, transform: [{ scale: knockFlash.interpolate({ inputRange: [0, 1], outputRange: [1, 1.12] }) }] },
+                ]}
               />
-            ) : (
-              <View style={styles.emptyPileSlot}>
-                <Text style={styles.emptyPileText}>—</Text>
-              </View>
-            )}
+            </View>
             <Text style={styles.pileCount}>{round.tablePileCount} retired</Text>
             {!isInstantWin && !isRoundOver && round.faceUpCard ? (
               <Text style={styles.tapHint}>
@@ -1133,19 +1145,28 @@ const styles = StyleSheet.create({
   },
   tableRow: { flexDirection: "row", justifyContent: "center", gap: 30 },
   pileBlock: { alignItems: "center", marginHorizontal: 10 },
+  // A plain shrink-wrap around the target Card — exists only so knockFlash
+  // (below) has something sized exactly like the card to inset against,
+  // without needing to know the card's pixel dimensions.
+  knockFlashAnchor: { position: "relative" },
   knockFlash: {
     position: "absolute",
-    top: 14,
-    alignSelf: "center",
-    width: 90,
-    height: 90,
-    borderRadius: 999,
-    // Green (same as colors.positive, used everywhere else for "good thing
-    // just happened") instead of gold — gold's already the app's default
-    // "this is tappable" color (see Card's own glow), so a gold flash on a
-    // successful knock read as just more of that same ambient color rather
-    // than a distinct "you did it" moment.
-    backgroundColor: "rgba(92,214,138,0.45)",
+    top: -6,
+    left: -6,
+    right: -6,
+    bottom: -6,
+    borderRadius: radius.lg + 6,
+    borderWidth: 4,
+    // A bright, saturated green (not colors.positive's soft pastel — that
+    // blends right into the felt's own dark green/teal backdrop) with a
+    // matching glow, so it reads as a clear ring around the card instead
+    // of a blob the opaque card face would otherwise just hide.
+    borderColor: "#3ef08a",
+    backgroundColor: "rgba(62,240,138,0.18)",
+    shadowColor: "#3ef08a",
+    shadowOpacity: 0.9,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
   },
   pileLabel: { color: colors.textMuted, marginBottom: 6, fontSize: 12 },
   pileCount: { color: colors.textMuted, fontSize: 11, marginTop: 6 },

@@ -100,6 +100,15 @@ export default function Card({ card, size = "normal", onPress, disabled, tappabl
   const sheenTranslate = hover.interpolate({ inputRange: [0, 1], outputRange: [-dims.width, dims.width] });
   const sheenOpacity = hover.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0, 0.9, 0.9] });
 
+  // A real size bump while `selected` — the gold border+glow below is easy
+  // to miss at a glance; actually growing the card is the one cue that
+  // can't be missed, so tapping the target card to say "I'm matching this"
+  // reads as an unmistakable, deliberate selection, not just a highlight.
+  const selectedScale = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    Animated.spring(selectedScale, { toValue: selected ? 1.15 : 1, useNativeDriver: true, speed: 20, bounciness: 6 }).start();
+  }, [selected]);
+
   // A soft breathing glow for anything currently actionable, faster/brighter
   // when it's the one you've selected.
   const glow = useRef(new Animated.Value(0)).current;
@@ -202,7 +211,7 @@ export default function Card({ card, size = "normal", onPress, disabled, tappabl
   // "ambient + contact" look plus an independent hover lift.
   const content = (
     <Animated.View style={entranceStyle}>
-      <Animated.View style={{ transform: [{ scale: hoverScale }, { translateY: hoverLift }] }}>
+      <Animated.View style={{ transform: [{ scale: hoverScale }, { scale: selectedScale }, { translateY: hoverLift }] }}>
         <Animated.View
           style={{
             shadowColor: shadows.card.ambient.shadowColor,
