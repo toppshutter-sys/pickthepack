@@ -1140,7 +1140,12 @@ const styles = StyleSheet.create({
     width: 90,
     height: 90,
     borderRadius: 999,
-    backgroundColor: "rgba(255,215,106,0.45)",
+    // Green (same as colors.positive, used everywhere else for "good thing
+    // just happened") instead of gold — gold's already the app's default
+    // "this is tappable" color (see Card's own glow), so a gold flash on a
+    // successful knock read as just more of that same ambient color rather
+    // than a distinct "you did it" moment.
+    backgroundColor: "rgba(92,214,138,0.45)",
   },
   pileLabel: { color: colors.textMuted, marginBottom: 6, fontSize: 12 },
   pileCount: { color: colors.textMuted, fontSize: 11, marginTop: 6 },
